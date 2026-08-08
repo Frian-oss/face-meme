@@ -1,95 +1,93 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>😀 表情包雷达 — 表情/动作识别 · 表情包匹配</title>
-<meta name="description" content="摄像头实时识别你的表情和动作，自动搜索最接近的表情包">
-<link rel="stylesheet" href="style.css?v=2">
+<title>MEME RADAR — Face it. Meme it.</title>
+<meta name="description" content="Real-time emotion & gesture recognition that finds the meme that matches you.">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
-<!-- file:// 协议提示（内联脚本在底部处理） -->
+<!-- file:// guard -->
 <div id="fileModeBanner" class="banner hidden">
-  ⚠️ 请不要直接双击打开本文件（浏览器会拦截本地资源）。
-  请在项目文件夹内运行：<code>python3 serve.py</code>，然后访问
-  <code>http://localhost:8000</code>
+  ⚠️ Please run <code>python3 serve.py</code> and open <code>http://localhost:8000</code> — do not open this file directly.
 </div>
 
-<!-- 无 API Key 提示条 -->
+<!-- no key banner -->
 <div id="keyBanner" class="banner warn hidden">
-  🔑 尚未配置 Giphy API Key，表情包搜索不可用。
-  <a href="#" id="keyBannerLink">点此打开设置</a>
+  🔑 No Giphy API Key configured — meme search is disabled.
+  <a href="#" id="keyBannerLink">Open settings</a>
 </div>
 
 <header class="topbar">
   <div class="brand">
-    <span class="logo">😀</span>
+    <span class="logo">◉</span>
     <div>
-      <h1>表情包雷达 <span class="version">v1.0</span></h1>
-      <p class="subtitle">摄像头实时识别表情与动作 · 自动匹配最像的表情包</p>
+      <h1>MEME RADAR</h1>
+      <p class="subtitle">Face it. Meme it.</p>
     </div>
   </div>
   <div class="topbar-actions">
-    <span id="keyStatus" class="badge">Key: 未配置</span>
-    <button id="settingsBtn" class="btn ghost" title="设置 Giphy API Key">⚙️ 设置</button>
+    <span id="keyStatus" class="badge">Key: off</span>
+    <button id="settingsBtn" class="btn ghost" title="Giphy API settings">Settings</button>
   </div>
 </header>
 
 <main class="layout">
 
-  <!-- 左侧：摄像头 -->
+  <!-- Camera -->
   <section class="panel camera-panel">
     <div class="video-wrap">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
       <div id="videoPlaceholder" class="video-placeholder">
-        <div class="ph-icon">🎥</div>
-        <p>点击下方按钮开启摄像头</p>
-        <p class="ph-sub">摄像头画面只在本地处理，不会上传</p>
+        <div class="ph-icon">◉</div>
+        <p>Camera preview appears here</p>
+        <p class="ph-sub">Allow camera access when prompted</p>
       </div>
     </div>
 
     <div class="stats-row">
       <span class="stat" id="fpsStat">-- FPS</span>
-      <span class="stat" id="faceStat">人脸: --</span>
+      <span class="stat" id="faceStat">Faces: --</span>
       <span class="stat" id="angleStat">roll: --° pitch: --° yaw: --°</span>
     </div>
 
-    <button id="startBtn" class="btn primary big">📷 开启摄像头</button>
+    <button id="startBtn" class="btn primary big">📷 Start Camera</button>
 
     <div class="bs-panel">
-      <h3>面部动作实时数值 <span class="muted">(Face Blendshapes)</span></h3>
-      <div id="bsBars" class="bs-bars"><div class="hint">启动后显示</div></div>
+      <h3>Live face signals <span class="muted">(blendshapes)</span></h3>
+      <div id="bsBars" class="bs-bars"><div class="hint">starts after launch</div></div>
     </div>
   </section>
 
-  <!-- 右侧：识别结果 + 表情包 -->
+  <!-- Results -->
   <section class="panel result-panel">
     <div class="current-box">
       <div class="current-left">
         <div id="emotionEmoji" class="emotion-emoji">🙂</div>
-        <div id="emotionName" class="emotion-name">等待中</div>
-        <div id="emotionDetail" class="emotion-detail">请开启摄像头并面对镜头</div>
+        <div id="emotionName" class="emotion-name">waiting</div>
+        <div id="emotionDetail" class="emotion-detail">start the camera and make a face</div>
       </div>
       <div class="current-right">
-        <div class="conf-label">匹配强度</div>
+        <div class="conf-label">confidence</div>
         <div class="confidence-track"><div id="confidenceBar" class="confidence-bar" style="width:0%"></div></div>
         <div id="confValue" class="conf-value">0%</div>
       </div>
     </div>
 
     <div class="event-box">
-      <h3>动作事件 <span class="muted">(点头 / 摇头 / 歪头 / 吐舌 / 眨眼)</span></h3>
-      <div id="eventLog" class="event-log"><div class="hint">做出动作后这里会实时记录</div></div>
+      <h3>Events <span class="muted">(nod / shake / tilt / wink / tongue / gestures)</span></h3>
+      <div id="eventLog" class="event-log"><div class="hint">your actions are logged here</div></div>
     </div>
 
     <div class="result-box">
-      <h3>匹配到的表情包 <span id="resultQuery" class="query-tag"></span></h3>
+      <h3>Matched memes <span id="resultQuery" class="query-tag"></span></h3>
       <div id="results" class="results">
         <div class="hint big-hint">
-          <div class="ph-icon">🖼️</div>
-          <p>对你的摄像头做一个表情或动作，<br>这里会自动搜索最接近的表情包</p>
+          <div class="ph-icon">◉</div>
+          <p>make a face or gesture,<br>the closest meme appears here</p>
         </div>
       </div>
     </div>
@@ -97,54 +95,52 @@
 </main>
 
 <footer class="footer">
-  <p>🔒 隐私说明：面部识别完全在<b>你的浏览器本地</b>完成（MediaPipe），画面不会上传到任何服务器；
-  表情包来自内置流行图库（可自行更换）或 Giphy 在线搜索。</p>
+  <p>🔒 All recognition runs <b>locally in your browser</b> (MediaPipe). Your camera feed is never uploaded.</p>
+  <p>Memes come from the built-in library or Giphy search.</p>
 </footer>
 
-<!-- 大图预览弹层 -->
+<!-- full preview modal -->
 <div id="modal" class="modal hidden">
   <div class="modal-card">
     <button class="modal-close" data-close="modal">✕</button>
-    <img id="modalImg" alt="表情包大图">
+    <img id="modalImg" alt="meme preview">
     <div class="modal-actions">
-      <button id="copyLinkBtn" class="btn primary">🔗 复制 GIF 链接</button>
-      <a id="openGiphyBtn" class="btn ghost" target="_blank" rel="noopener">↗️ 在 Giphy 打开</a>
+      <button id="copyLinkBtn" class="btn primary">🔗 Copy link</button>
+      <a id="openGiphyBtn" class="btn ghost" target="_blank" rel="noopener">↗ Open on Giphy</a>
     </div>
   </div>
 </div>
 
-<!-- 设置弹层 -->
+<!-- settings modal -->
 <div id="settingsModal" class="modal hidden">
   <div class="modal-card settings-card">
     <button class="modal-close" data-close="settingsModal">✕</button>
-    <h2>⚙️ 设置 — Giphy API Key</h2>
-    <p class="muted">表情包来自 Giphy 在线搜索，需要一个免费的 API Key：</p>
+    <h2>Settings — Giphy API Key</h2>
+    <p class="muted">Memes come from Giphy search. Add your free API key:</p>
     <ol class="steps">
-      <li>打开 <a href="https://developers.giphy.com/dashboard/" target="_blank" rel="noopener">Giphy Developers</a> 并登录（支持 Google / GitHub 账号）</li>
-      <li>点击 <b>Create an App</b>，产品类型选 <b>API</b>，填个名字（如 meme-radar）</li>
-      <li>创建后页面会显示 <b>API Key</b>，复制粘贴到下方</li>
+      <li>Open <a href="https://developers.giphy.com/dashboard/" target="_blank" rel="noopener">Giphy Developers</a> and sign in</li>
+      <li><b>Create an App</b> → product type <b>API</b></li>
+      <li>Copy the <b>API Key</b> and paste it below</li>
     </ol>
-    <input id="keyInput" type="text" placeholder="粘贴你的 Giphy API Key，例如 abc123XYZ…" autocomplete="off">
+    <input id="keyInput" type="text" placeholder="Paste your Giphy API Key here…" autocomplete="off">
     <div class="settings-actions">
-      <button id="testKeyBtn" class="btn ghost">测试 Key</button>
-      <button id="saveKeyBtn" class="btn primary">保存</button>
+      <button id="testKeyBtn" class="btn ghost">Test key</button>
+      <button id="saveKeyBtn" class="btn primary">Save</button>
     </div>
     <div id="keyTestResult" class="key-test-result"></div>
-    <p class="muted small">Key 只保存在本浏览器（localStorage），不会上传。</p>
+    <p class="muted small">Stored only in this browser (localStorage).</p>
   </div>
 </div>
 
-<!-- toast 提示 -->
 <div id="toast" class="toast hidden"></div>
 
 <script>
-  // file:// 协议检测：直接双击打开时，浏览器会拦截本地模块/模型加载
   (function () {
     if (location.protocol === 'file:') {
       document.getElementById('fileModeBanner').classList.remove('hidden');
     }
   })();
 </script>
-<script type="module" src="app.js?v=2"></script>
+<script type="module" src="app.js?v=3"></script>
 </body>
 </html>

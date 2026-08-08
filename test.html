@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>engine test</title></head>
+<body><p id="out">running…</p>
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from './assets/vision_bundle.js';
+const out = document.getElementById('out');
+function report(t) { out.textContent = t; document.title = 'DONE'; }
+try {
+  out.textContent = 'step1: loading fileset…';
+  const fileset = await FilesetResolver.forVisionTasks('assets/wasm/');
+  out.textContent = 'step2: fileset ok, creating landmarker…';
+  const lm = await FaceLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: 'assets/face_landmarker.task', delegate: 'CPU' },
+    runningMode: 'IMAGE', numFaces: 1, outputFaceBlendshapes: true,
+  });
+  out.textContent = 'step3: landmarker ok, detecting…';
+  const img = new Image();
+  img.src = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="320" height="240" fill="#888"/></svg>');
+  await img.decode();
+  const res = lm.detect(img);
+  const bs = res.faceBlendshapes ? res.faceBlendshapes.length + ' sets' : 'none';
+  report('OK: landmarks=' + (res.faceLandmarks ? res.faceLandmarks.length : 0) + ' blendshapes=' + bs);
+} catch (e) {
+  report('ERROR: ' + e.name + ': ' + e.message);
+}
+</script>
+</body>
+</html>

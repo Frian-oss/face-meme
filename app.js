@@ -18,51 +18,51 @@ const CONFIG = {
   cdnHandJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/hand_landmarker.task',
   memesJson: 'assets/memes/memes.json',
   limit: 8,
-  searchCooldownMs: 1200,
-  eventCooldownMs: 3000,
+  searchCooldownMs: 900,
+  eventCooldownMs: 2500,
   keyStorage: 'giphyApiKey',
 };
 
 // 可选：把你的 Giphy API Key 填在这里，别人打开页面免配置即可搜索（网站公开后 Key 可见）
 const DEFAULT_GIPHY_KEY = 'e1mauv8DEXyy3IEwcNorFXna28U9zC8u';
 
-/* ---------------- 面部表情 → 表情包分类 ---------------- */
+/* ---------------- facial expression → meme category ---------------- */
 const EMOTIONS = [
-  { id: 'laugh',    emoji: '😂', name: '大笑', prio: 6, keywords: ['laughing', 'lol', 'funny meme'],
-    check: s => s.mouthSmile > 0.45 && s.jawOpen > 0.35 ? 0.8 : 0 },
-  { id: 'happy',    emoji: '😄', name: '开心', prio: 5, keywords: ['happy', 'funny cat', 'wholesome meme'],
-    check: s => s.mouthSmile > 0.22 ? Math.min(1, s.mouthSmile) : 0 },
-  { id: 'surprised', emoji: '😮', name: '惊讶', prio: 5, keywords: ['surprised', 'shocked', 'mind blown'],
-    check: s => (s.jawOpen > 0.35 && s.browInnerUp > 0.22) ? Math.max(s.jawOpen, s.browInnerUp) : 0 },
-  { id: 'angry',    emoji: '😠', name: '生气', prio: 4, keywords: ['angry', 'mad', 'rage'],
-    check: s => (s.browDown > 0.32 && s.mouthPress > 0.12) ? s.browDown : 0 },
-  { id: 'sad',      emoji: '😢', name: '难过', prio: 3, keywords: ['sad', 'crying', 'sad cat'],
-    check: s => s.mouthFrown > 0.28 ? Math.min(1, s.mouthFrown + s.browInnerUp * 0.5) : 0 },
-  { id: 'disgusted', emoji: '🤢', name: '嫌弃', prio: 3, keywords: ['disgusted', 'gross', 'eww'],
-    check: s => s.noseSneer > 0.28 ? s.noseSneer : 0 },
-  { id: 'fear',     emoji: '😨', name: '害怕', prio: 3, keywords: ['scared', 'afraid', 'scream'],
-    check: s => (s.eyeWide > 0.32 && s.browInnerUp > 0.28 && s.jawOpen > 0.15) ? s.eyeWide : 0 },
-  { id: 'neutral',  emoji: '🙂', name: '平静', prio: 1, keywords: ['chill', 'cool', 'relaxed'],
+  { id: 'laugh',    emoji: '😂', name: 'laughing', prio: 6, keywords: ['laughing', 'laughing hard', 'lol'],
+    check: s => s.mouthSmile > 0.35 && s.jawOpen > 0.3 ? 0.8 : 0 },
+  { id: 'happy',    emoji: '😄', name: 'happy', prio: 5, keywords: ['happy', 'smiling', 'happy dance'],
+    check: s => s.mouthSmile > 0.15 ? Math.min(1, s.mouthSmile) : 0 },
+  { id: 'surprised', emoji: '😮', name: 'surprised', prio: 5, keywords: ['surprised', 'shocked', 'wow'],
+    check: s => (s.jawOpen > 0.25 && s.browInnerUp > 0.18) ? Math.max(s.jawOpen, s.browInnerUp) : 0 },
+  { id: 'angry',    emoji: '😠', name: 'angry', prio: 4, keywords: ['angry', 'mad', 'furious'],
+    check: s => (s.browDown > 0.25 && s.mouthPress > 0.1) ? s.browDown : 0 },
+  { id: 'sad',      emoji: '😢', name: 'sad', prio: 3, keywords: ['sad', 'crying', 'sad cat'],
+    check: s => s.mouthFrown > 0.2 ? Math.min(1, s.mouthFrown + s.browInnerUp * 0.5) : 0 },
+  { id: 'disgusted', emoji: '🤢', name: 'disgusted', prio: 3, keywords: ['disgusted', 'gross', 'eww'],
+    check: s => s.noseSneer > 0.22 ? s.noseSneer : 0 },
+  { id: 'fear',     emoji: '😨', name: 'scared', prio: 3, keywords: ['scared', 'afraid', 'scream'],
+    check: s => (s.eyeWide > 0.25 && s.browInnerUp > 0.22 && s.jawOpen > 0.12) ? s.eyeWide : 0 },
+  { id: 'neutral',  emoji: '🙂', name: 'neutral', prio: 1, keywords: ['chill', 'relaxed', 'cool'],
     check: () => 0.5 },
 ];
 
-/* 头部动作 → 表情包分类 */
+/* head movement → meme category */
 const EVENTS = [
-  { id: 'nod',    emoji: '👍', name: '点头', keywords: ['yes', 'nodding', 'agreed'] },
-  { id: 'shake',  emoji: '👎', name: '摇头', keywords: ['no', 'shaking head', 'nope'] },
-  { id: 'tilt',   emoji: '🙃', name: '歪头', keywords: ['confused', 'head tilt', 'what'] },
-  { id: 'wink',   emoji: '😉', name: '眨眼', keywords: ['wink', 'flirting'] },
-  { id: 'tongue', emoji: '😜', name: '吐舌', keywords: ['tongue out', 'goofy', 'bleh'] },
+  { id: 'nod',    emoji: '👍', name: 'nodding', keywords: ['nodding', 'yes', 'agree'] },
+  { id: 'shake',  emoji: '👎', name: 'shaking head', keywords: ['shaking head', 'no', 'nope'] },
+  { id: 'tilt',   emoji: '🙃', name: 'head tilt', keywords: ['confused', 'head tilt', 'what'] },
+  { id: 'wink',   emoji: '😉', name: 'wink', keywords: ['wink', 'flirting'] },
+  { id: 'tongue', emoji: '😜', name: 'tongue out', keywords: ['tongue out', 'goofy', 'bleh'] },
 ];
 
-/* 手部手势 → 表情包分类 */
+/* hand gestures → meme category */
 const HAND_GESTURES = [
-  { id: 'peace',   emoji: '✌️', name: '比耶', keywords: ['peace sign', 'victory', 'v for victory'] },
-  { id: 'thumbsup', emoji: '👍', name: '点赞', keywords: ['thumbs up', 'good job', 'like'] },
-  { id: 'ok',      emoji: '👌', name: 'OK 手势', keywords: ['ok hand', 'perfect', 'alright'] },
-  { id: 'wave',    emoji: '👋', name: '挥手', keywords: ['waving hello', 'bye', 'hello'] },
-  { id: 'fist',    emoji: '✊', name: '握拳', keywords: ['fist', 'fist bump', 'power'] },
-  { id: 'one',     emoji: '☝️', name: '一指', keywords: ['number one', 'first', 'hold on'] },
+  { id: 'peace',   emoji: '✌️', name: 'peace sign', keywords: ['peace sign', 'victory', 'v sign'] },
+  { id: 'thumbsup', emoji: '👍', name: 'thumbs up', keywords: ['thumbs up', 'good job', 'like'] },
+  { id: 'ok',      emoji: '👌', name: 'OK', keywords: ['ok hand', 'perfect', 'alright'] },
+  { id: 'wave',    emoji: '👋', name: 'waving', keywords: ['waving', 'hello', 'bye'] },
+  { id: 'fist',    emoji: '✊', name: 'fist', keywords: ['fist', 'fist bump', 'power'] },
+  { id: 'one',     emoji: '☝️', name: 'number one', keywords: ['number one', 'first', 'one'] },
 ];
 
 /* ---------------- 状态 ---------------- */
@@ -129,7 +129,7 @@ function closeLandmarkers() {
 
 async function getUserMediaWithFallback() {
   if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-    const e = new Error('当前环境没有摄像头 API');
+    const e = new Error('No camera API in this environment');
     e.name = 'NoMediaDevices';
     throw e;
   }
@@ -244,8 +244,8 @@ function loop(now) {
       stopLoop();
       closeLandmarkers();
       el.startBtn.disabled = false;
-      el.startBtn.textContent = '📷 开启摄像头';
-      toast('⚠️ 识别出错，请重新开启：' + (err.message || err));
+      el.startBtn.textContent = '📷 Start Camera';
+      toast('⚠️ Recognition error, restart: ' + (err.message || err));
       return;
     }
   }
@@ -261,11 +261,11 @@ function loop(now) {
 /* ---------------- 人脸结果 ---------------- */
 function handleFaceResult(result, now) {
   if (!result.faceLandmarks || result.faceLandmarks.length === 0) {
-    el.faceStat.textContent = '人脸: 0';
+    el.faceStat.textContent = 'Faces: 0';
     ctx && ctx.clearRect(0, 0, overlay.width, overlay.height);
     return;
   }
-  el.faceStat.textContent = `人脸: ${result.faceLandmarks.length}`;
+  el.faceStat.textContent = `Faces: ${result.faceLandmarks.length}`;
 
   const lm = result.faceLandmarks[0];
   const bsArr = (result.faceBlendshapes && Array.isArray(result.faceBlendshapes) && result.faceBlendshapes.length)
@@ -367,17 +367,17 @@ function detectOscillation(arr, threshold, minFlips) {
 function detectEvent(scores, angles, now) {
   pushSample(pitchHistory, angles.pitch, now);
   pushSample(yawHistory, angles.yaw, now);
-  if (detectOscillation(pitchHistory, 6, 2)) { pitchHistory.length = 0; return EVENT_OK('nod', now); }
-  if (detectOscillation(yawHistory, 8, 2)) { yawHistory.length = 0; return EVENT_OK('shake', now); }
+  if (detectOscillation(pitchHistory, 5, 1)) { pitchHistory.length = 0; return EVENT_OK('nod', now); }
+  if (detectOscillation(yawHistory, 6, 1)) { yawHistory.length = 0; return EVENT_OK('shake', now); }
 
   pushSample(rollHistory, angles.roll, now);
-  if (Math.abs(angles.roll) > 18) {
+  if (Math.abs(angles.roll) > 15) {
     if (!tiltSince) tiltSince = now;
-    else if (now - tiltSince > 450) { tiltSince = 0; rollHistory.length = 0; return EVENT_OK('tilt', now); }
+    else if (now - tiltSince > 300) { tiltSince = 0; rollHistory.length = 0; return EVENT_OK('tilt', now); }
   } else tiltSince = 0;
 
-  if (scores.eyeBlink > 0.6) return EVENT_OK('wink', now);
-  if (scores.tongueOut > 0.5) return EVENT_OK('tongue', now);
+  if (scores.eyeBlink > 0.5) return EVENT_OK('wink', now);
+  if (scores.tongueOut > 0.4) return EVENT_OK('tongue', now);
   return null;
 
   function EVENT_OK(id, t) {
@@ -428,8 +428,8 @@ function detectHandGesture(lm) {
     ring: fingerExt(lm, H.RING_TIP, H.RING_MCP),
     pinky: fingerExt(lm, H.PINKY_TIP, H.PINKY_MCP),
   };
-  const straight = v => v > 1.3;
-  const bent = v => v < 1.05;
+  const straight = v => v > 1.2;
+  const bent = v => v < 1.15;
 
   if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('peace');
   if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('thumbsup');
@@ -449,9 +449,9 @@ function triggerMeme(category, label, keywords, now) {
   lastSearchAt = now;
 
   const local = pickLocalMeme(category);
-  el.resultQuery.textContent = local ? `图库 · ${label}` : `Giphy · ${label}`;
+  el.resultQuery.textContent = local ? `Library · ${label}` : `Giphy · ${label}`;
   if (local) {
-    setSearchingState('正在挑选流行表情包…');
+    setSearchingState('picking a meme…');
     setTimeout(() => showMemes([{ url: local, title: label }], label), 250);
     return;
   }
@@ -459,11 +459,11 @@ function triggerMeme(category, label, keywords, now) {
 }
 
 function setSearchingState(text) {
-  el.results.innerHTML = `<div class="hint big-hint"><div class="ph-icon">🎭</div><p>${text || '正在搜索…'}</p></div>`;
+  el.results.innerHTML = `<div class="hint big-hint"><div class="ph-icon">🎭</div><p>${text || 'searching…'}</p></div>`;
 }
 
 function showMemes(items, label) {
-  if (!items.length) { renderEmpty('😅 没有表情包，换个表情试试'); return; }
+  if (!items.length) { renderEmpty('😅 no memes found — try another face'); return; }
   el.results.innerHTML = '';
   for (const it of items) {
     const card = document.createElement('div');
@@ -478,7 +478,7 @@ async function searchGiphy(keywords, label) {
   setSearchingState();
   const key = getKey();
   if (!key) {
-    renderEmpty('🔑 未配置 Giphy API Key — 点右上角「⚙️ 设置」填写');
+    renderEmpty('🔑 No Giphy API Key — open Settings (top right)');
     el.keyBanner.classList.remove('hidden');
     return;
   }
@@ -497,7 +497,7 @@ async function searchGiphy(keywords, label) {
     showMemes(items, label);
   } catch (err) {
     console.error('Giphy 搜索失败:', err);
-    renderEmpty('⚠️ 表情包搜索失败（网络不通或 Key 无效）');
+    renderEmpty('⚠️ meme search failed (network or key)');
   }
 }
 
@@ -520,8 +520,8 @@ async function loadTrending() {
         ? { url: img.url, title: g.title || 'trending' } : null;
     }).filter(Boolean);
     if (items.length) {
-      el.resultQuery.textContent = '🔥 Giphy 当下流行';
-      showMemes(items, '当下流行');
+      el.resultQuery.textContent = '🔥 Trending on Giphy';
+      showMemes(items, 'trending');
     }
   } catch (e) {
     console.warn('热榜加载失败（不影响识别）:', e);
@@ -540,7 +540,7 @@ async function copyGifLink() {
   if (!currentGifUrl) return;
   try {
     await navigator.clipboard.writeText(currentGifUrl);
-    toast('✅ 已复制表情包链接');
+    toast('✅ link copied');
   } catch {
     const ta = document.createElement('textarea');
     ta.value = currentGifUrl;
@@ -548,7 +548,7 @@ async function copyGifLink() {
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    toast('✅ 已复制表情包链接');
+    toast('✅ link copied');
   }
 }
 
@@ -562,7 +562,7 @@ function setCurrentUI(emotion) {
   el.emotionEmoji.textContent = emotion.emoji;
   el.emotionName.textContent = emotion.name;
   el.emotionDetail.textContent =
-    emotion.id === 'neutral' ? '表情放松中… 试试 微笑 / 张嘴 / 比耶 / 点赞' : `匹配强度 ${Math.round(emotion.score * 100)}%`;
+    emotion.id === 'neutral' ? 'relaxed… try smiling, opening your mouth, or a thumbs up' : `confidence ${Math.round(emotion.score * 100)}%`;
   el.emotionEmoji.classList.remove('pop');
   void el.emotionEmoji.offsetWidth;
   el.emotionEmoji.classList.add('pop');
@@ -570,9 +570,9 @@ function setCurrentUI(emotion) {
 
 function updateBars(s) {
   const bars = [
-    ['微笑 😊', s.mouthSmile], ['张嘴 😮', s.jawOpen], ['挑眉 🤨', s.browInnerUp],
-    ['皱眉 😠', s.browDown], ['撇嘴 😕', s.mouthFrown], ['眨眼 👁️', s.eyeBlink],
-    ['皱鼻 🤢', s.noseSneer], ['吐舌 😜', s.tongueOut],
+    ['Smile 😊', s.mouthSmile], ['Mouth open 😮', s.jawOpen], ['Brows up 🤨', s.browInnerUp],
+    ['Brows down 😠', s.browDown], ['Frown 😕', s.mouthFrown], ['Blink 👁️', s.eyeBlink],
+    ['Nose 🤢', s.noseSneer], ['Tongue 😜', s.tongueOut],
   ];
   el.bsBars.innerHTML = bars.map(([name, v]) => `
     <div class="bs-row">
@@ -609,7 +609,7 @@ function drawFace(lm, angles) {
   if (Math.abs(angles.roll) > 15) {
     ctx.fillStyle = 'rgba(255,209,102,0.95)';
     ctx.font = '14px sans-serif';
-    ctx.fillText(`歪头 ${angles.roll.toFixed(0)}°`, 12, 24);
+    ctx.fillText(`tilt ${angles.roll.toFixed(0)}°`, 12, 24);
   }
 }
 function drawConnections(conns, pts) {
@@ -651,15 +651,15 @@ function drawHands(hands) {
  * ============================================================ */
 function updateKeyStatus() {
   const has = !!getKey();
-  el.keyStatus.textContent = has ? 'Key: 已配置 ✓' : 'Key: 未配置';
+  el.keyStatus.textContent = has ? 'Key: on' : 'Key: off';
   el.keyStatus.classList.toggle('ok', has);
   el.keyBanner.classList.toggle('hidden', has);
 }
 async function testKey() {
   const key = el.keyInput.value.trim();
   el.keyTestResult.className = 'key-test-result';
-  if (!key) { el.keyTestResult.textContent = '请先粘贴 API Key'; return; }
-  el.keyTestResult.textContent = '测试中…';
+  if (!key) { el.keyTestResult.textContent = 'Paste your key first'; return; }
+  el.keyTestResult.textContent = 'testing…';
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
   try {
@@ -667,14 +667,14 @@ async function testKey() {
     if (res.ok) {
       const j = await res.json();
       el.keyTestResult.className = 'key-test-result ok';
-      el.keyTestResult.textContent = `✓ Key 有效，可以搜索到 ${(j.data || []).length}+ 个结果`;
+      el.keyTestResult.textContent = `✓ Key works — ${(j.data || []).length}+ results`;
     } else {
       el.keyTestResult.className = 'key-test-result err';
-      el.keyTestResult.textContent = `✗ Key 无效（HTTP ${res.status}），请检查是否复制完整`;
+      el.keyTestResult.textContent = `✗ Invalid key (HTTP ${res.status})`;
     }
   } catch {
     el.keyTestResult.className = 'key-test-result err';
-    el.keyTestResult.textContent = '✗ 无法连接 Giphy，请检查网络';
+    el.keyTestResult.textContent = '✗ Cannot reach Giphy, check your network';
   } finally { clearTimeout(timer); }
 }
 
@@ -684,27 +684,27 @@ async function testKey() {
 function showCameraError(err) {
   const ua = navigator.userAgent || '';
   const msg = (
-    err.name === 'NoMediaDevices' ? '当前浏览器/地址没有摄像头 API。请用最新版 Chrome 或 Safari，并通过 https:// 或 localhost 访问'
-    : err.name === 'NotAllowedError' ? '摄像头权限被拒绝。请在浏览器地址栏点击 🔒 → 网站设置 → 摄像头 → 改为「允许」，然后刷新重试'
-    : err.name === 'NotFoundError' ? '未找到摄像头，请确认设备有摄像头且未被其他软件占用'
-    : err.name === 'SecurityError' ? '当前环境不允许使用摄像头（请用 HTTPS 或 localhost 访问）'
-    : `摄像头启动失败（${err.name || '未知错误'}）：${err.message || '请重试'}`);
+    err.name === 'NoMediaDevices' ? 'No camera API in this browser/address. Use the latest Chrome or Safari over https:// or localhost'
+    : err.name === 'NotAllowedError' ? 'Camera permission denied. Click 🔒 in the address bar → Site settings → Camera → Allow, then reload'
+    : err.name === 'NotFoundError' ? 'No camera found — check your device and close apps using the camera'
+    : err.name === 'SecurityError' ? 'Camera not allowed here (use HTTPS or localhost)'
+    : `Camera failed (${err.name || 'unknown'}): ${err.message || 'try again'}`);
   el.placeholder.innerHTML = `
     <div class="ph-icon">⚠️</div>
-    <p style="color:#fff;font-weight:600">摄像头启动失败</p>
+    <p style="color:#fff;font-weight:600">Camera failed to start</p>
     <p class="ph-sub" style="max-width:320px">${msg}</p>
     <p class="ph-sub" style="max-width:340px;font-size:11px;word-break:break-all;text-align:left;background:rgba(255,255,255,0.06);padding:8px 10px;border-radius:6px">
-      诊断：${err.name}<br>网址：${location.href}<br>浏览器：${ua.slice(0, 90)}
+      Diagnostics: ${err.name}<br>URL: ${location.href}<br>Browser: ${ua.slice(0, 90)}
     </p>
-    <p class="ph-sub">修复后可重新点击上方按钮重试</p>`;
+    <p class="ph-sub">Fix the issue, then click the button above to retry</p>`;
   el.placeholder.classList.remove('hidden');
 }
 function showModelError(err) {
   el.placeholder.innerHTML = `
     <div class="ph-icon">🛠️</div>
-    <p style="color:#fff;font-weight:600">AI 模型加载失败</p>
-    <p class="ph-sub" style="max-width:320px">摄像头已就绪，但 AI 模型加载失败：${err.name || '网络问题'}。请检查网络后刷新重试。</p>
-    <p class="ph-sub">（不会影响摄像头画面，重试即可）</p>`;
+    <p style="color:#fff;font-weight:600">AI model failed to load</p>
+    <p class="ph-sub" style="max-width:320px">Camera is ready, but the AI model failed: ${err.name || 'network issue'}. Reload and try again.</p>
+    <p class="ph-sub">(Your camera feed is not affected)</p>`;
   el.placeholder.classList.remove('hidden');
 }
 
@@ -718,7 +718,7 @@ function setupUI() {
     fpsFrames = 0; fpsTimer = 0; bsUpdateAt = 0;
     pitchHistory.length = 0; yawHistory.length = 0; rollHistory.length = 0; tiltSince = 0;
     el.startBtn.disabled = true;
-    el.startBtn.textContent = '⏳ 正在启动…';
+    el.startBtn.textContent = '⏳ Starting…';
     try {
       // ① 摄像头
       try {
@@ -727,11 +727,11 @@ function setupUI() {
         console.error('摄像头失败:', err);
         showCameraError(err);
         el.startBtn.disabled = false;
-        el.startBtn.textContent = '📷 开启摄像头';
+        el.startBtn.textContent = '📷 Start Camera';
         return;
       }
-      // ② AI 模型（首次需下载约 20MB，提示用户耐心等待）
-      el.startBtn.textContent = '⏳ 加载 AI 模型（首次约 20MB，请稍候）…';
+      // ② AI model (first load ~20MB)
+      el.startBtn.textContent = '⏳ Loading AI model (first time ~20MB)…';
       let models;
       try {
         models = await initLandmarkers();
@@ -739,20 +739,20 @@ function setupUI() {
         console.error('模型失败:', err);
         showModelError(err);
         el.startBtn.disabled = false;
-        el.startBtn.textContent = '📷 重新尝试';
+        el.startBtn.textContent = '📷 Try again';
         return;
       }
       faceLandmarker = models.face;
       handLandmarker = models.hand;
-      el.startBtn.textContent = handLandmarker ? '🟢 识别中（表情+手势）' : '🟢 识别中（仅表情）';
+      el.startBtn.textContent = handLandmarker ? '🟢 Recognizing — face & gestures' : '🟢 Recognizing — face only';
       running = true;
       rafId = requestAnimationFrame(loop);
-      toast(handLandmarker ? '🎉 识别已启动！做表情、比手势试试' : '🎉 识别已启动！做表情试试');
+      toast(handLandmarker ? '🎉 Ready! Make a face or gesture' : '🎉 Ready! Make a face');
     } catch (err) {
       console.error(err);
       el.startBtn.disabled = false;
-      el.startBtn.textContent = '📷 开启摄像头';
-      toast('⚠️ 启动失败：' + (err.message || err));
+      el.startBtn.textContent = '📷 Start Camera';
+      toast('⚠️ Failed to start: ' + (err.message || err));
     }
   });
 
@@ -768,7 +768,7 @@ function setupUI() {
     else localStorage.removeItem(CONFIG.keyStorage);
     updateKeyStatus();
     el.settingsModal.classList.add('hidden');
-    toast(key ? '✅ Key 已保存' : '已清除 Key');
+    toast(key ? '✅ Key saved' : 'Key cleared');
   });
   $('testKeyBtn').addEventListener('click', testKey);
   el.keyBannerLink.addEventListener('click', e => { e.preventDefault(); el.settingsBtn.click(); });
