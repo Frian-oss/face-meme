@@ -65,7 +65,7 @@ const HAND_GESTURES = [
 /* ---------------- 状态 ---------------- */
 let faceLandmarker = null;
 let handLandmarker = null;
-let video = null, overlay = null, ctx = null;
+let overlay = null, ctx = null;
 let running = false;
 let rafId = null;
 let lastVideoTime = -1;
@@ -151,6 +151,7 @@ async function initCamera() {
   el.video.srcObject = stream;
   await ready;
   await el.video.play();
+  overlay = el.overlay;
   overlay.width = el.video.videoWidth;
   overlay.height = el.video.videoHeight;
   ctx = overlay.getContext('2d');
