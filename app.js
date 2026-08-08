@@ -307,18 +307,55 @@ function handleFaceResult(result, now) {
 }
 
 /* ---------------- 手部结果 ---------------- */
+/* 手部稳定化状态机：连续帧确认 + 触发后锁定，避免闪烁 */
+let handState = { id: null, streak: 0, none: 0, lockUntil: 0 };
+
 function handleHandResult(result) {
   const hands = (result && Array.isArray(result.landmarks)) ? result.landmarks : [];
   if (hands.length) drawHands(hands);
+  const now = performance.now();
+  const st = handState;
+
+  // 锁定期间不重复触发（给显示时间，防闪烁）
+  if (now < st.lockUntil) {
+    st.none = 0;
+    return;
+  }
+
+  let id = null;
   for (const lm of hands) {
     if (!Array.isArray(lm) || lm.length < 21) continue;
-    const id = detectHandGesture(lm);
-    if (!id) continue;
-    if (mode === 'culture') { renderCultureGesture(id); continue; }
-    const g = HAND_GESTURES.find(x => x.id === id);
-    if (g) {
-      logEvent(g);
-      triggerMeme(g.id, `${g.emoji} ${g.name}`, g.keywords, performance.now());
+    id = detectHandGesture(lm);
+    if (id) break;
+  }
+
+  if (id) {
+    st.none = 0;
+    if (st.id === id) {
+      st.streak++;
+    } else {
+      st.id = id;
+      st.streak = 1;
+    }
+    if (st.streak >= 5) {           // 连续 ~0.17s 确认
+      st.streak = 0;
+      st.lockUntil = now + 1500;    // 锁定 1.5s
+      if (mode === 'culture') {
+        renderCultureGesture(id);
+      } else {
+        const g = HAND_GESTURES.find(x => x.id === id);
+        if (g) {
+          logEvent(g);
+          triggerMeme(g.id, `${g.emoji} ${g.name}`, g.keywords, now);
+        }
+      }
+    }
+  } else {
+    st.none++;
+    if (st.none >= 8) {             // 无手势持续 ~0.27s
+      st.id = null;
+      st.streak = 0;
+      if (mode === 'culture') clearCultureDisplay();
     }
   }
 }
@@ -440,15 +477,15 @@ function detectHandGesture(lm) {
     ring: fingerExt(lm, H.RING_TIP, H.RING_MCP),
     pinky: fingerExt(lm, H.PINKY_TIP, H.PINKY_MCP),
   };
-  const straight = v => v > 1.2;
-  const bent = v => v < 1.15;
-  // pinch（捏手指）：拇指尖与食指尖接近成圈，其余手指弯
+  const straight = v => v > 1.15;   // 放宽：更易判定为“伸”
+  const bent = v => v < 1.25;       // 放宽：更易判定为“弯”
+  // 拇指尖与食指尖距离：分层区分 pinch / ok / one
   const dTI = d2(lm[H.THUMB_TIP], lm[H.INDEX_TIP]);
-  if (dTI < 0.07 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'pinch';
 
-  if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'peace';
+  if (dTI < 0.07 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'pinch';
   if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'thumbsup';
-  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky) && !straight(ext.thumb)) return 'ok';
+  if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'peace';
+  if (dTI < 0.13 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'ok';
   if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'fist';
   if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'one';
   if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) return 'wave';
@@ -669,9 +706,17 @@ function renderCultureGallery() {
   el.cultureGallery.querySelectorAll('.gesture-cell').forEach(btn => {
     btn.addEventListener('click', () => {
       setMode('culture');
+      handState.lockUntil = performance.now() + 2500;   // 手动预览期间不被摄像头识别覆盖
       renderCultureGesture(btn.dataset.id);
     });
   });
+}
+
+function clearCultureDisplay() {
+  if (!currentCultureId) return;
+  currentCultureId = null;
+  el.cultureCurrent.innerHTML = '<div class="hint big-hint">make a gesture — pinch 🤌, OK 👌, thumbs up 👍…</div>';
+  highlightCultureCard(null);
 }
 
 function highlightCultureCard(id) {
@@ -688,7 +733,7 @@ function setupCultureMode() {
     const k = e.key;
     if (k >= '1' && k <= '7') {
       const c = CULTURE_GESTURES[Number(k) - 1];
-      if (c) { setMode('culture'); renderCultureGesture(c.id); }
+      if (c) { setMode('culture'); handState.lockUntil = performance.now() + 2500; renderCultureGesture(c.id); }
     }
   });
 }
