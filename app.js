@@ -504,10 +504,10 @@ function detectHandGesture(lm) {
   if (dTI < 0.15 && avg3 < 1.35) id = 'pinch';    // 捏手指：三指放松/弯曲（宽松）
   else if (dTI < 0.06 && threeStraight) id = 'heart';  // 韩国比心：指尖紧贴 + 三指直
   else if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'thumbsup';
-  else if (dTI > 0.18 && straight(ext.thumb) && straight(ext.index) && straight(ext.pinky) && bent(ext.middle) && bent(ext.ring)) id = 'ily';  // ILY：三指张开（与摇滚区分）
-  else if (straight(ext.index) && straight(ext.pinky) && bent(ext.middle) && bent(ext.ring)) id = 'rock';
+  else if (dTI > 0.18 && straight(ext.thumb) && straight(ext.index) && straight(ext.pinky) && bent(ext.middle) && bent(ext.ring)) id = 'ily';  // ILY：三指张开
   else if (straight(ext.thumb) && straight(ext.pinky) && bent(ext.index) && bent(ext.middle) && bent(ext.ring)) id = 'shaka';
   else if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'peace';
+  else if (straight(ext.middle) && bent(ext.index) && bent(ext.ring) && bent(ext.pinky)) id = 'middle';  // 竖中指：中指伸 + 其余弯
   else if (dTI < 0.18 && !all3bent) id = 'ok';    // OK 圈：三指不全弯（放松或伸直）
   else if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'fist';
   else if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && bent(ext.pinky)) id = 'three';
