@@ -299,9 +299,10 @@ function handleFaceResult(result, now) {
 
 /* ---------------- 手部结果 ---------------- */
 function handleHandResult(result) {
-  const hands = result.landmarks || [];
+  const hands = (result && Array.isArray(result.landmarks)) ? result.landmarks : [];
   if (hands.length) drawHands(hands);
   for (const lm of hands) {
+    if (!Array.isArray(lm) || lm.length < 21) continue;
     const g = detectHandGesture(lm);
     if (g) {
       logEvent(g);
@@ -623,8 +624,10 @@ function drawConnections(conns, pts) {
   ctx.stroke();
 }
 function drawHands(hands) {
+  if (!Array.isArray(hands)) return;
   const cw = overlay.width, ch = overlay.height;
   for (const lm of hands) {
+    if (!Array.isArray(lm) || lm.length < 21) continue;
     const pts = lm.map(p => ({ x: p.x * cw, y: p.y * ch }));
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
     ctx.lineWidth = 2;
