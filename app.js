@@ -13,6 +13,9 @@ const CONFIG = {
   cdnWasmRoot: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm',
   cdnFace: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task',
   cdnHand: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',
+  // jsDelivr 仓库 CDN：国内可达性比 GitHub Pages / Google 更好
+  cdnFaceJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/face_landmarker.task',
+  cdnHandJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/hand_landmarker.task',
   memesJson: 'assets/memes/memes.json',
   limit: 8,
   searchCooldownMs: 1200,
@@ -171,11 +174,11 @@ async function createLM(Cls, wasmRoot, modelPath, delegate) {
     outputFaceBlendshapes: true,
   });
 }
-async function createWithRetry(Cls, modelPath) {
+async function createWithRetry(Cls, localPath, cdnPaths) {
   const tries = [
-    [CONFIG.wasmRoot, modelPath, 'GPU'],
-    [CONFIG.wasmRoot, modelPath, 'CPU'],
-    [CONFIG.cdnWasmRoot, Cls === FaceLandmarker ? CONFIG.cdnFace : CONFIG.cdnHand, 'GPU'],
+    [CONFIG.wasmRoot, localPath, 'GPU'],
+    [CONFIG.wasmRoot, localPath, 'CPU'],
+    ...cdnPaths.map(([w, m]) => [w, m, 'GPU']),
   ];
   let lastErr;
   for (const [w, m, d] of tries) {
@@ -185,10 +188,17 @@ async function createWithRetry(Cls, modelPath) {
   throw lastErr || new Error(Cls.name + ' 模型加载失败');
 }
 async function initLandmarkers() {
-  const face = await createWithRetry(FaceLandmarker, CONFIG.faceModel);
+  const face = await createWithRetry(FaceLandmarker, CONFIG.faceModel, [
+    [CONFIG.cdnWasmRoot, CONFIG.cdnFaceJsdelivr],
+    [CONFIG.cdnWasmRoot, CONFIG.cdnFace],
+  ]);
   let hand = null;
-  try { hand = await createWithRetry(HandLandmarker, CONFIG.handModel); }
-  catch (e) { console.warn('手部模型加载失败，仅使用人脸识别:', e); }
+  try {
+    hand = await createWithRetry(HandLandmarker, CONFIG.handModel, [
+      [CONFIG.cdnWasmRoot, CONFIG.cdnHandJsdelivr],
+      [CONFIG.cdnWasmRoot, CONFIG.cdnHand],
+    ]);
+  } catch (e) { console.warn('手部模型加载失败，仅使用人脸识别:', e); }
   return { face, hand };
 }
 
@@ -258,7 +268,9 @@ function handleFaceResult(result, now) {
   el.faceStat.textContent = `人脸: ${result.faceLandmarks.length}`;
 
   const lm = result.faceLandmarks[0];
-  const scores = getScores(result.faceBlendshapes ? result.faceBlendshapes[0] : []);
+  const bsArr = (result.faceBlendshapes && Array.isArray(result.faceBlendshapes) && result.faceBlendshapes.length)
+    ? result.faceBlendshapes[0] : [];
+  const scores = getScores(bsArr);
   const angles = calcAngles(lm);
 
   drawFace(lm, angles);
@@ -301,7 +313,11 @@ function handleHandResult(result) {
 /* ---------------- 表情数据 ---------------- */
 function getScores(bs) {
   const m = {};
-  for (const b of bs) m[b.categoryName] = b.score;
+  if (!Array.isArray(bs)) return {
+    mouthSmile: 0, jawOpen: 0, browInnerUp: 0, browDown: 0, mouthPress: 0,
+    mouthFrown: 0, noseSneer: 0, eyeWide: 0, eyeBlink: 0, tongueOut: 0,
+  };   // 防御：数据异常时返回全零，不崩溃
+  for (const b of bs) if (b && b.categoryName) m[b.categoryName] = b.score;
   const max = (a, b) => Math.max(m[a] || 0, m[b] || 0);
   return {
     mouthSmile: max('mouthSmileLeft', 'mouthSmileRight'),
@@ -596,6 +612,7 @@ function drawFace(lm, angles) {
   }
 }
 function drawConnections(conns, pts) {
+  if (!Array.isArray(conns) || !conns.length) return;
   ctx.beginPath();
   for (const c of conns) {
     if (pts[c.start] && pts[c.end]) {
@@ -710,8 +727,8 @@ function setupUI() {
         el.startBtn.textContent = '📷 开启摄像头';
         return;
       }
-      // ② AI 模型
-      el.startBtn.textContent = '⏳ 加载 AI 模型…';
+      // ② AI 模型（首次需下载约 20MB，提示用户耐心等待）
+      el.startBtn.textContent = '⏳ 加载 AI 模型（首次约 20MB，请稍候）…';
       let models;
       try {
         models = await initLandmarkers();
