@@ -131,6 +131,16 @@ function stopApp() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 }
 
+// 启动失败时，在摄像头区域持久显示错误信息（不会一闪而过）
+function showStartError(msg) {
+  el.placeholder.innerHTML = `
+    <div class="ph-icon">⚠️</div>
+    <p style="color:#fff;font-weight:600">启动失败</p>
+    <p class="ph-sub" style="max-width:300px">${msg}</p>
+    <p class="ph-sub">修复后可重新点击上方按钮重试</p>`;
+  el.placeholder.classList.remove('hidden');
+}
+
 async function getUserMediaWithFallback() {
   // 优先带约束（前置摄像头+理想尺寸）；部分手机浏览器不支持 facingMode/尺寸，
   // 会抛 OverconstrainedError —— 此时降级为裸请求，保证摄像头能开
@@ -602,12 +612,14 @@ function setupUI() {
       console.error(err);
       el.startBtn.disabled = false;
       el.startBtn.textContent = '📷 开启摄像头';
-      toast('⚠️ 启动失败：' + (
-        err.name === 'NotAllowedError' ? '摄像头权限被拒绝，请在浏览器地址栏点🔒允许摄像头'
-        : err.name === 'NotFoundError' ? '未找到摄像头，请确认设备有摄像头'
+      const msg = (
+        err.name === 'NotAllowedError' ? '摄像头权限被拒绝。请在浏览器地址栏点击 🔒 → 网站设置 → 摄像头 → 改为「允许」，然后刷新页面重试'
+        : err.name === 'NotFoundError' ? '未找到摄像头，请确认设备有摄像头且未被其他软件占用'
         : err.name === 'SecurityError' ? '当前环境不允许使用摄像头（请用 HTTPS 或 localhost 访问）'
         : err.name === 'TypeError' ? '浏览器不支持摄像头，请换用最新版 Safari / Chrome'
-        : err.message || '请确认已联网（模型加载需要网络）'));
+        : err.message || '未知错误，请检查网络后重试');
+      toast('⚠️ 启动失败：' + msg);
+      showStartError(msg);
     }
   });
 
