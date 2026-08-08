@@ -18,7 +18,7 @@ const CONFIG = {
   cdnFaceJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/face_landmarker.task',
   cdnHandJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/hand_landmarker.task',
   memesJson: 'assets/memes/memes.json',
-  limit: 8,
+  limit: 12,
   searchCooldownMs: 900,
   eventCooldownMs: 2500,
   keyStorage: 'giphyApiKey',
@@ -82,6 +82,7 @@ const pitchHistory = [], yawHistory = [], rollHistory = [];
 let tiltSince = 0;
 let localMemes = {};   // 分类 -> [url,...]（来自 memes.json）
 let mode = 'meme';     // 'meme' | 'culture'
+let emotionState = { id: null, streak: 0 };   // 情绪稳定化
 
 /* ---------------- DOM ---------------- */
 const $ = id => document.getElementById(id);
@@ -288,7 +289,10 @@ function handleFaceResult(result, now) {
   const evt = detectEvent(scores, angles, now);
   const emotion = pickEmotion(scores);
 
-  if (!lastEmotion || emotion.id !== lastEmotion.id) {
+  // 情绪稳定化：连续 5 帧同一情绪才切换（防抖动），但置信度条实时更新
+  if (emotion.id !== emotionState.id) { emotionState.id = emotion.id; emotionState.streak = 1; }
+  else emotionState.streak++;
+  if (emotionState.streak >= 5 && (!lastEmotion || emotion.id !== lastEmotion.id)) {
     lastEmotion = emotion;
     setCurrentUI(emotion);
     triggerMeme(emotion.id, `${emotion.emoji} ${emotion.name}`, emotion.keywords, now);
@@ -307,8 +311,8 @@ function handleFaceResult(result, now) {
 }
 
 /* ---------------- 手部结果 ---------------- */
-/* 手部稳定化状态机：连续帧确认 + 触发后锁定，避免闪烁 */
-let handState = { id: null, streak: 0, none: 0, lockUntil: 0 };
+/* 手部稳定化状态机：3 帧确认触发；手势保持期间不重复触发（只切换变化） */
+let handState = { id: null, streak: 0, fired: false, none: 0, previewUntil: 0 };
 
 function handleHandResult(result) {
   const hands = (result && Array.isArray(result.landmarks)) ? result.landmarks : [];
@@ -316,46 +320,57 @@ function handleHandResult(result) {
   const now = performance.now();
   const st = handState;
 
-  // 锁定期间不重复触发（给显示时间，防闪烁）
-  if (now < st.lockUntil) {
-    st.none = 0;
-    return;
-  }
+  // 手动预览锁：图鉴/快捷键预览期间不响应摄像头识别
+  if (now < st.previewUntil) return;
 
-  let id = null;
+  let det = null;
   for (const lm of hands) {
     if (!Array.isArray(lm) || lm.length < 21) continue;
-    id = detectHandGesture(lm);
-    if (id) break;
+    det = detectHandGesture(lm);
+    if (det) break;
+  }
+  const id = det ? det.id : null;
+
+  // 调试信息：在画面左下显示识别到的手势与手指伸展度
+  if (ctx && (id || det)) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = '12px monospace';
+    const e = det ? det.ext : {};
+    const txt = `hand: ${id || '—'}  t:${(e.thumb||0).toFixed(2)} i:${(e.index||0).toFixed(2)} m:${(e.middle||0).toFixed(2)} r:${(e.ring||0).toFixed(2)} p:${(e.pinky||0).toFixed(2)}`;
+    ctx.fillText(txt, 10, overlay.height - 16);
   }
 
   if (id) {
     st.none = 0;
     if (st.id === id) {
+      if (st.fired) return;      // 已触发且手势未变：保持显示，不重触发
       st.streak++;
     } else {
       st.id = id;
       st.streak = 1;
+      st.fired = false;
     }
-    if (st.streak >= 5) {           // 连续 ~0.17s 确认
-      st.streak = 0;
-      st.lockUntil = now + 1500;    // 锁定 1.5s
-      if (mode === 'culture') {
-        renderCultureGesture(id);
-      } else {
-        const g = HAND_GESTURES.find(x => x.id === id);
-        if (g) {
-          logEvent(g);
-          triggerMeme(g.id, `${g.emoji} ${g.name}`, g.keywords, now);
-        }
-      }
+    if (st.streak >= 3) {        // 连续 ~0.1s 确认
+      st.fired = true;
+      fireHandGesture(id, now);
     }
   } else {
     st.none++;
-    if (st.none >= 8) {             // 无手势持续 ~0.27s
-      st.id = null;
-      st.streak = 0;
+    if (st.none >= 8) {
+      st.id = null; st.streak = 0; st.fired = false;
       if (mode === 'culture') clearCultureDisplay();
+    }
+  }
+}
+
+function fireHandGesture(id, now) {
+  if (mode === 'culture') {
+    renderCultureGesture(id);
+  } else {
+    const g = HAND_GESTURES.find(x => x.id === id);
+    if (g) {
+      logEvent(g);
+      triggerMeme(g.id, `${g.emoji} ${g.name}`, g.keywords, now);
     }
   }
 }
@@ -481,15 +496,17 @@ function detectHandGesture(lm) {
   const bent = v => v < 1.25;       // 放宽：更易判定为“弯”
   // 拇指尖与食指尖距离：分层区分 pinch / ok / one
   const dTI = d2(lm[H.THUMB_TIP], lm[H.INDEX_TIP]);
+  let id = null;
 
-  if (dTI < 0.07 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'pinch';
-  if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'thumbsup';
-  if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'peace';
-  if (dTI < 0.13 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'ok';
-  if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'fist';
-  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'one';
-  if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) return 'wave';
-  return null;
+  if (dTI < 0.07 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'pinch';
+  else if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'thumbsup';
+  else if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'peace';
+  else if (dTI < 0.13 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'ok';
+  else if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'fist';
+  else if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'one';
+  else if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) id = 'wave';
+
+  return id ? { id, ext } : null;
 }
 
 /* ============================================================
@@ -525,6 +542,17 @@ function showMemes(items, label) {
   }
 }
 
+let lastQuery = '';
+const recentUrls = new Set();
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 async function searchGiphy(keywords, label) {
   setSearchingState();
   const key = getKey();
@@ -534,17 +562,29 @@ async function searchGiphy(keywords, label) {
     return;
   }
   try {
-    const q = pick(keywords);
+    // 关键词轮换：避免连续触发时总搜同一个词
+    let q = pick(keywords);
+    if (keywords.length > 1 && q === lastQuery) q = pick(keywords);
+    lastQuery = q;
+
     const url = `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(key)}` +
       `&q=${encodeURIComponent(q)}&limit=${CONFIG.limit}&rating=g&lang=en`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Giphy HTTP ${res.status}`);
     const json = await res.json();
-    const items = (json.data || []).map(g => {
+    let items = (json.data || []).map(g => {
       const img = g.images && (g.images.fixed_height_small || g.images.preview_gif || g.images.fixed_height);
       return img && (img.url.startsWith('http://') || img.url.startsWith('https://'))
         ? { url: img.url, title: g.title || label } : null;
     }).filter(Boolean);
+
+    // 去重最近展示过的 + 随机打乱，让每次结果不一样
+    const fresh = items.filter(it => !recentUrls.has(it.url));
+    const pool = fresh.length >= 4 ? fresh : items;
+    items = shuffle(pool).slice(0, CONFIG.limit);
+    items.forEach(it => recentUrls.add(it.url));
+    while (recentUrls.size > 40) recentUrls.delete(recentUrls.values().next().value);
+
     showMemes(items, label);
   } catch (err) {
     console.error('Giphy 搜索失败:', err);
@@ -706,7 +746,7 @@ function renderCultureGallery() {
   el.cultureGallery.querySelectorAll('.gesture-cell').forEach(btn => {
     btn.addEventListener('click', () => {
       setMode('culture');
-      handState.lockUntil = performance.now() + 2500;   // 手动预览期间不被摄像头识别覆盖
+      handState.previewUntil = performance.now() + 2500;   // 手动预览期间不被摄像头识别覆盖
       renderCultureGesture(btn.dataset.id);
     });
   });
@@ -733,7 +773,7 @@ function setupCultureMode() {
     const k = e.key;
     if (k >= '1' && k <= '7') {
       const c = CULTURE_GESTURES[Number(k) - 1];
-      if (c) { setMode('culture'); handState.lockUntil = performance.now() + 2500; renderCultureGesture(c.id); }
+      if (c) { setMode('culture'); handState.previewUntil = performance.now() + 2500; renderCultureGesture(c.id); }
     }
   });
 }
