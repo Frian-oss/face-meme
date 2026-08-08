@@ -494,15 +494,21 @@ function detectHandGesture(lm) {
   };
   const straight = v => v > 1.15;   // 放宽：更易判定为“伸”
   const bent = v => v < 1.25;       // 放宽：更易判定为“弯”
-  // 拇指尖与食指尖距离：分层区分 pinch / ok / one
+  // 拇指尖与食指尖距离：区分 pinch / ok
   const dTI = d2(lm[H.THUMB_TIP], lm[H.INDEX_TIP]);
+  const all3bent = bent(ext.middle) && bent(ext.ring) && bent(ext.pinky);
   let id = null;
 
-  if (dTI < 0.07 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'pinch';
+  if (dTI < 0.15 && all3bent) id = 'pinch';    // 捏手指：三指弯 + 拇指食指接近
+  else if (dTI < 0.06 && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) id = 'heart';  // 韩国比心：指尖相触 + 三指直
   else if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'thumbsup';
+  else if (straight(ext.thumb) && straight(ext.index) && straight(ext.pinky) && bent(ext.middle) && bent(ext.ring)) id = 'ily';
+  else if (straight(ext.thumb) && straight(ext.pinky) && bent(ext.index) && bent(ext.middle) && bent(ext.ring)) id = 'shaka';
+  else if (straight(ext.index) && straight(ext.pinky) && bent(ext.middle) && bent(ext.ring)) id = 'rock';
   else if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'peace';
-  else if (dTI < 0.13 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'ok';
+  else if (dTI < 0.15 && !all3bent) id = 'ok'; // OK 圈：三指不全弯（放松或伸直）
   else if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'fist';
+  else if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && bent(ext.pinky)) id = 'three';
   else if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) id = 'one';
   else if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) id = 'wave';
 
@@ -771,7 +777,7 @@ function setupCultureMode() {
   document.addEventListener('keydown', e => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key;
-    if (k >= '1' && k <= '7') {
+    if (k >= '1' && k <= '9') {
       const c = CULTURE_GESTURES[Number(k) - 1];
       if (c) { setMode('culture'); handState.previewUntil = performance.now() + 2500; renderCultureGesture(c.id); }
     }
