@@ -4,6 +4,7 @@
  * 摄像头与模型错误分开诊断
  * ============================================================ */
 import { FaceLandmarker, HandLandmarker, FilesetResolver } from './assets/vision_bundle.js';
+import { CULTURE_GESTURES, HEAD_CULTURE } from './culture.js';
 
 /* ---------------- 配置 ---------------- */
 const CONFIG = {
@@ -80,6 +81,7 @@ let bsUpdateAt = 0;
 const pitchHistory = [], yawHistory = [], rollHistory = [];
 let tiltSince = 0;
 let localMemes = {};   // 分类 -> [url,...]（来自 memes.json）
+let mode = 'meme';     // 'meme' | 'culture'
 
 /* ---------------- DOM ---------------- */
 const $ = id => document.getElementById(id);
@@ -93,6 +95,9 @@ const el = {
   modal: $('modal'), modalImg: $('modalImg'), copyLinkBtn: $('copyLinkBtn'), openGiphyBtn: $('openGiphyBtn'),
   settingsModal: $('settingsModal'), keyInput: $('keyInput'), keyTestResult: $('keyTestResult'),
   keyStatus: $('keyStatus'), keyBanner: $('keyBanner'), keyBannerLink: $('keyBannerLink'),
+  tabMeme: $('tabMeme'), tabCulture: $('tabCulture'),
+  memePanel: $('memePanel'), culturePanel: $('culturePanel'),
+  cultureCurrent: $('cultureCurrent'), cultureGallery: $('cultureGallery'),
   toast: $('toast'),
 };
 
@@ -293,7 +298,11 @@ function handleFaceResult(result, now) {
 
   if (evt) {
     logEvent(evt);
-    triggerMeme(evt.id, `${evt.emoji} ${evt.name}`, evt.keywords, now);
+    if (mode === 'culture' && HEAD_CULTURE.some(c => c.id === evt.id)) {
+      renderCultureHead(evt.id);
+    } else {
+      triggerMeme(evt.id, `${evt.emoji} ${evt.name}`, evt.keywords, now);
+    }
   }
 }
 
@@ -303,7 +312,10 @@ function handleHandResult(result) {
   if (hands.length) drawHands(hands);
   for (const lm of hands) {
     if (!Array.isArray(lm) || lm.length < 21) continue;
-    const g = detectHandGesture(lm);
+    const id = detectHandGesture(lm);
+    if (!id) continue;
+    if (mode === 'culture') { renderCultureGesture(id); continue; }
+    const g = HAND_GESTURES.find(x => x.id === id);
     if (g) {
       logEvent(g);
       triggerMeme(g.id, `${g.emoji} ${g.name}`, g.keywords, performance.now());
@@ -430,16 +442,18 @@ function detectHandGesture(lm) {
   };
   const straight = v => v > 1.2;
   const bent = v => v < 1.15;
+  // pinch（捏手指）：拇指尖与食指尖接近成圈，其余手指弯
+  const dTI = d2(lm[H.THUMB_TIP], lm[H.INDEX_TIP]);
+  if (dTI < 0.07 && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'pinch';
 
-  if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('peace');
-  if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('thumbsup');
-  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky) && !straight(ext.thumb)) return byId('ok');
-  if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('fist');
-  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('one');
-  if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) return byId('wave');
+  if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'peace';
+  if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'thumbsup';
+  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky) && !straight(ext.thumb)) return 'ok';
+  if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'fist';
+  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return 'one';
+  if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) return 'wave';
   return null;
 }
-function byId(id) { return HAND_GESTURES.find(g => g.id === id); }
 
 /* ============================================================
  * 6. 表情包触发（本地图库优先 → Giphy 回退）
@@ -590,6 +604,93 @@ function logEvent(evt) {
   el.eventLog.prepend(item);
   while (el.eventLog.children.length > 8) el.eventLog.lastChild.remove();
   el.eventLog.querySelector('.hint')?.remove();
+}
+
+/* ============================================================
+ * 7.5 CULTURE MODE — same gesture, different languages
+ * ============================================================ */
+let currentCultureId = null;
+
+function setMode(m) {
+  mode = m;
+  el.tabMeme.classList.toggle('active', m === 'meme');
+  el.tabCulture.classList.toggle('active', m === 'culture');
+  el.memePanel.hidden = m !== 'meme';
+  el.culturePanel.hidden = m !== 'culture';
+}
+
+function buildCultureCard(c) {
+  return `
+    <div class="culture-card">
+      <div class="cc-head">
+        <span class="cc-emoji">${c.emoji}</span>
+        <div>
+          <div class="cc-name">${c.name}</div>
+          <div class="cc-desc">${c.desc}</div>
+        </div>
+      </div>
+      ${c.tagline ? `<p class="cc-tagline">${c.tagline}</p>` : ''}
+      <div class="cc-meanings">
+        ${c.meanings.map(m => `
+          <div class="cc-item">
+            <span class="cc-flag">${m.flag}</span>
+            <div class="cc-body">
+              <span class="cc-country">${m.country}</span>
+              <span class="cc-meaning">${m.meaning}</span>
+            </div>
+          </div>`).join('')}
+      </div>
+      <p class="cc-takeaway">${c.takeaway}</p>
+    </div>`;
+}
+
+function renderCultureGesture(id) {
+  const c = CULTURE_GESTURES.find(x => x.id === id);
+  if (!c) return;
+  currentCultureId = id;
+  el.cultureCurrent.innerHTML = buildCultureCard(c);
+  highlightCultureCard(id);
+}
+
+function renderCultureHead(id) {
+  const c = HEAD_CULTURE.find(x => x.id === id);
+  if (!c) return;
+  currentCultureId = id;
+  el.cultureCurrent.innerHTML = buildCultureCard(c);
+  highlightCultureCard(id);
+}
+
+function renderCultureGallery() {
+  el.cultureGallery.innerHTML = CULTURE_GESTURES.map(c => `
+    <button class="gesture-cell" data-id="${c.id}" title="preview">
+      <span class="gc-emoji">${c.emoji}</span>
+      <span class="gc-name">${c.name}</span>
+    </button>`).join('');
+  el.cultureGallery.querySelectorAll('.gesture-cell').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setMode('culture');
+      renderCultureGesture(btn.dataset.id);
+    });
+  });
+}
+
+function highlightCultureCard(id) {
+  el.cultureGallery.querySelectorAll('.gesture-cell').forEach(b =>
+    b.classList.toggle('active', b.dataset.id === id));
+}
+
+function setupCultureMode() {
+  renderCultureGallery();
+  el.tabMeme.addEventListener('click', () => setMode('meme'));
+  el.tabCulture.addEventListener('click', () => setMode('culture'));
+  document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (k >= '1' && k <= '7') {
+      const c = CULTURE_GESTURES[Number(k) - 1];
+      if (c) { setMode('culture'); renderCultureGesture(c.id); }
+    }
+  });
 }
 
 /* ---------------- 绘制 ---------------- */
@@ -780,6 +881,7 @@ function setupUI() {
   }
   el.copyLinkBtn.addEventListener('click', copyGifLink);
 
+  setupCultureMode();
   updateKeyStatus();
 }
 

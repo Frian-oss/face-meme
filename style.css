@@ -278,3 +278,87 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
 }
+
+/* ============================================================
+ * MEME RADAR × TRANSLATE — culture mode & mode tabs
+ * ============================================================ */
+[hidden] { display: none !important; }
+
+.mode-tabs {
+  display: flex; justify-content: center; gap: 8px;
+  padding: 18px 28px 0; max-width: 1320px; width: 100%; margin: 0 auto;
+}
+.mode-tab {
+  font-size: 0.82rem; letter-spacing: 2px; text-transform: uppercase;
+  padding: 9px 26px; border-radius: 30px; cursor: pointer;
+  background: transparent; border: 1px solid var(--line);
+  color: var(--muted);
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+.mode-tab:hover { border-color: var(--line-strong); color: var(--text); }
+.mode-tab.active { background: var(--inv-bg); color: var(--inv-text); border-color: var(--inv-bg); }
+
+/* culture intro */
+.culture-intro { padding: 6px 2px 14px; border-bottom: 1px solid var(--line); }
+.culture-intro .kicker {
+  font-size: 0.66rem; letter-spacing: 3.5px; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 14px;
+}
+.culture-intro h2 {
+  font-family: var(--serif); font-weight: 400;
+  font-size: clamp(1.6rem, 3.4vw, 2.2rem); line-height: 1.25;
+  margin-bottom: 12px;
+}
+.culture-intro p { font-size: 0.86rem; color: var(--muted); max-width: 46ch; }
+
+/* culture current card */
+.culture-current { min-height: 120px; }
+.culture-card {
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-2); padding: 18px;
+  animation: slideIn 0.3s ease;
+}
+.cc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.cc-emoji { font-size: 2.6rem; line-height: 1; }
+.cc-name { font-family: var(--serif); font-size: 1.35rem; letter-spacing: 0.5px; }
+.cc-desc { font-size: 0.78rem; color: var(--muted); }
+.cc-tagline {
+  font-family: var(--serif); font-style: italic;
+  font-size: 1rem; color: var(--text);
+  margin-bottom: 14px; padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+}
+.cc-meanings { display: flex; flex-direction: column; gap: 8px; }
+.cc-item {
+  display: flex; gap: 12px; align-items: baseline;
+  padding: 7px 12px; border-radius: 8px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+}
+.cc-flag { font-size: 1.1rem; }
+.cc-body { display: flex; flex-direction: column; }
+.cc-country { font-size: 0.72rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); }
+.cc-meaning { font-size: 0.86rem; color: var(--text); }
+.cc-takeaway {
+  margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line);
+  font-size: 0.82rem; color: var(--muted); font-family: var(--serif); font-style: italic;
+}
+
+/* culture gallery */
+.culture-gallery { margin-top: 6px; }
+.culture-gallery h3 {
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 10px;
+}
+.gesture-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.gesture-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px 6px; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--line);
+  color: var(--muted);
+  transition: border-color 0.2s ease, transform 0.15s ease, color 0.2s ease;
+}
+.gesture-cell:hover { border-color: var(--line-strong); transform: translateY(-2px); color: var(--text); }
+.gesture-cell.active { border-color: var(--text); color: var(--text); }
+.gc-emoji { font-size: 1.6rem; line-height: 1; }
+.gc-name { font-size: 0.68rem; letter-spacing: 0.5px; }

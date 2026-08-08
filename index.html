@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MEME RADAR — Face it. Meme it.</title>
-<meta name="description" content="Real-time emotion & gesture recognition that finds the meme that matches you.">
-<link rel="stylesheet" href="style.css?v=3">
+<title>MEME RADAR × TRANSLATE — Face it. Gesture it.</title>
+<meta name="description" content="Real-time gesture recognition: matched memes, and the same gesture decoded across cultures.">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -24,8 +24,8 @@
   <div class="brand">
     <span class="logo">◉</span>
     <div>
-      <h1>MEME RADAR</h1>
-      <p class="subtitle">Face it. Meme it.</p>
+      <h1>MEME RADAR <span class="version">× TRANSLATE</span></h1>
+      <p class="subtitle">Face it. Gesture it.</p>
     </div>
   </div>
   <div class="topbar-actions">
@@ -34,9 +34,14 @@
   </div>
 </header>
 
+<div class="mode-tabs">
+  <button id="tabMeme" class="mode-tab active">🎭 Meme Mode</button>
+  <button id="tabCulture" class="mode-tab">🌍 Culture Mode</button>
+</div>
+
 <main class="layout">
 
-  <!-- Camera -->
+  <!-- Camera (shared) -->
   <section class="panel camera-panel">
     <div class="video-wrap">
       <video id="video" autoplay muted playsinline></video>
@@ -62,8 +67,8 @@
     </div>
   </section>
 
-  <!-- Results -->
-  <section class="panel result-panel">
+  <!-- Meme Mode view -->
+  <section class="panel result-panel" id="memePanel">
     <div class="current-box">
       <div class="current-left">
         <div id="emotionEmoji" class="emotion-emoji">🙂</div>
@@ -92,11 +97,29 @@
       </div>
     </div>
   </section>
+
+  <!-- Culture Mode view -->
+  <section class="panel result-panel" id="culturePanel" hidden>
+    <div class="culture-intro">
+      <p class="kicker">TRANSLATE · culture mode</p>
+      <h2>Same gesture.<br>Different languages.</h2>
+      <p>Translation is not only about words. When language fails we speak with our hands — but the same hand speaks differently in every culture. Make a gesture and see what it says around the world.</p>
+    </div>
+
+    <div id="cultureCurrent" class="culture-current">
+      <div class="hint big-hint">make a gesture — pinch 🤌, OK 👌, thumbs up 👍…</div>
+    </div>
+
+    <div class="culture-gallery">
+      <h3>Gesture library <span class="muted">(press 1–7 to preview)</span></h3>
+      <div id="cultureGallery" class="gesture-grid"></div>
+    </div>
+  </section>
 </main>
 
 <footer class="footer">
   <p>🔒 All recognition runs <b>locally in your browser</b> (MediaPipe). Your camera feed is never uploaded.</p>
-  <p>Memes come from the built-in library or Giphy search.</p>
+  <p>MEME RADAR × TRANSLATE — an RCA group project on how meaning moves.</p>
 </footer>
 
 <!-- full preview modal -->
@@ -141,6 +164,6 @@
     }
   })();
 </script>
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=4"></script>
 </body>
 </html>
