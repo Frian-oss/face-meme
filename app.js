@@ -131,12 +131,26 @@ function stopApp() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 }
 
+async function getUserMediaWithFallback() {
+  // 优先带约束（前置摄像头+理想尺寸）；部分手机浏览器不支持 facingMode/尺寸，
+  // 会抛 OverconstrainedError —— 此时降级为裸请求，保证摄像头能开
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+  } catch (e) {
+    if (e.name === 'OverconstrainedError' || e.name === 'NotReadableError' || e.name === 'NotFoundError') {
+      console.warn('约束过严，降级为默认摄像头请求:', e);
+      return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+    throw e;
+  }
+}
+
 async function initCamera() {
   stopCamera();
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-    audio: false,
-  });
+  const stream = await getUserMediaWithFallback();
   // 先挂 onloadedmetadata 再赋值 srcObject，避免竞态
   const ready = new Promise(res => { el.video.onloadedmetadata = res; });
   el.video.srcObject = stream;
@@ -588,8 +602,11 @@ function setupUI() {
       console.error(err);
       el.startBtn.disabled = false;
       el.startBtn.textContent = '📷 开启摄像头';
-      toast('⚠️ 启动失败：' + (err.name === 'NotAllowedError'
-        ? '摄像头权限被拒绝，请在浏览器地址栏允许'
+      toast('⚠️ 启动失败：' + (
+        err.name === 'NotAllowedError' ? '摄像头权限被拒绝，请在浏览器地址栏点🔒允许摄像头'
+        : err.name === 'NotFoundError' ? '未找到摄像头，请确认设备有摄像头'
+        : err.name === 'SecurityError' ? '当前环境不允许使用摄像头（请用 HTTPS 或 localhost 访问）'
+        : err.name === 'TypeError' ? '浏览器不支持摄像头，请换用最新版 Safari / Chrome'
         : err.message || '请确认已联网（模型加载需要网络）'));
     }
   });
