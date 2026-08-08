@@ -1,63 +1,49 @@
 /* ============================================================
- * 表情包雷达 — app.js
- * 摄像头实时人脸表情/动作识别 (MediaPipe FaceLandmarker)
- * 识别结果映射为情绪关键词 → 调用 Giphy API 搜索表情包
+ * 表情包雷达 v2 — 表情/动作/手势识别 · 流行表情包匹配
+ * 人脸表情 + 头部动作 + 手部手势 → 本地流行图库 / Giphy 搜索
+ * 摄像头与模型错误分开诊断
  * ============================================================ */
-import { FaceLandmarker, FilesetResolver } from './assets/vision_bundle.js';
+import { FaceLandmarker, HandLandmarker, FilesetResolver } from './assets/vision_bundle.js';
 
 /* ---------------- 配置 ---------------- */
 const CONFIG = {
-  // 本地资源（打包随行）；加载失败会自动回退到下面的 CDN
+  faceModel: 'assets/face_landmarker.task',
+  handModel: 'assets/hand_landmarker.task',
   wasmRoot: 'assets/wasm/',
-  modelPath: 'assets/face_landmarker.task',
-  // 回退 CDN
   cdnWasmRoot: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm',
-  cdnModel: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task',
-  // 搜索
+  cdnFace: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task',
+  cdnHand: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',
+  memesJson: 'assets/memes/memes.json',
   limit: 8,
-  searchCooldownMs: 1200,     // 搜索冷却
-  eventCooldownMs: 3000,      // 同类动作事件冷却
+  searchCooldownMs: 1200,
+  eventCooldownMs: 3000,
   keyStorage: 'giphyApiKey',
 };
 
-// ============================================================
-// 可选：把你自己申请的 Giphy API Key 填在这里，
-// 别人打开页面就能直接用表情包搜索（无需各自配置）。
-// 注意：网站公开后此 Key 对所有人可见，仅供课堂/小组演示使用。
-// 留空则每个访问者需在页面右上角「⚙️ 设置」里自行填写。
-// ============================================================
+// 可选：把你的 Giphy API Key 填在这里，别人打开页面免配置即可搜索（网站公开后 Key 可见）
 const DEFAULT_GIPHY_KEY = 'e1mauv8DEXyy3IEwcNorFXna28U9zC8u';
 
-/* ---------------- 情绪 → 表情包 映射 ---------------- */
-// check 返回 0~1 的匹配强度；prio 高的先判定
+/* ---------------- 面部表情 → 表情包分类 ---------------- */
 const EMOTIONS = [
-  { id: 'laugh',    emoji: '😂', name: '大笑', prio: 6,
-    keywords: ['laughing', 'lol', 'laughing hard'],
+  { id: 'laugh',    emoji: '😂', name: '大笑', prio: 6, keywords: ['laughing', 'lol', 'funny meme'],
     check: s => s.mouthSmile > 0.45 && s.jawOpen > 0.35 ? 0.8 : 0 },
-  { id: 'happy',    emoji: '😄', name: '开心', prio: 5,
-    keywords: ['happy', 'happy dance', 'smiling'],
+  { id: 'happy',    emoji: '😄', name: '开心', prio: 5, keywords: ['happy', 'funny cat', 'wholesome meme'],
     check: s => s.mouthSmile > 0.22 ? Math.min(1, s.mouthSmile) : 0 },
-  { id: 'surprised', emoji: '😮', name: '惊讶', prio: 5,
-    keywords: ['surprised', 'shocked', 'mind blown'],
+  { id: 'surprised', emoji: '😮', name: '惊讶', prio: 5, keywords: ['surprised', 'shocked', 'mind blown'],
     check: s => (s.jawOpen > 0.35 && s.browInnerUp > 0.22) ? Math.max(s.jawOpen, s.browInnerUp) : 0 },
-  { id: 'angry',    emoji: '😠', name: '生气', prio: 4,
-    keywords: ['angry', 'mad', 'rage'],
+  { id: 'angry',    emoji: '😠', name: '生气', prio: 4, keywords: ['angry', 'mad', 'rage'],
     check: s => (s.browDown > 0.32 && s.mouthPress > 0.12) ? s.browDown : 0 },
-  { id: 'sad',      emoji: '😢', name: '难过', prio: 3,
-    keywords: ['sad', 'crying', 'sad puppy'],
+  { id: 'sad',      emoji: '😢', name: '难过', prio: 3, keywords: ['sad', 'crying', 'sad cat'],
     check: s => s.mouthFrown > 0.28 ? Math.min(1, s.mouthFrown + s.browInnerUp * 0.5) : 0 },
-  { id: 'disgusted', emoji: '🤢', name: '嫌弃', prio: 3,
-    keywords: ['disgusted', 'gross', 'eww'],
+  { id: 'disgusted', emoji: '🤢', name: '嫌弃', prio: 3, keywords: ['disgusted', 'gross', 'eww'],
     check: s => s.noseSneer > 0.28 ? s.noseSneer : 0 },
-  { id: 'fear',     emoji: '😨', name: '害怕', prio: 3,
-    keywords: ['scared', 'afraid', 'scream'],
+  { id: 'fear',     emoji: '😨', name: '害怕', prio: 3, keywords: ['scared', 'afraid', 'scream'],
     check: s => (s.eyeWide > 0.32 && s.browInnerUp > 0.28 && s.jawOpen > 0.15) ? s.eyeWide : 0 },
-  { id: 'neutral',  emoji: '🙂', name: '平静', prio: 1,
-    keywords: ['chill', 'relaxed', 'cool'],
+  { id: 'neutral',  emoji: '🙂', name: '平静', prio: 1, keywords: ['chill', 'cool', 'relaxed'],
     check: () => 0.5 },
 ];
 
-/* 动作事件 → 表情包 映射 */
+/* 头部动作 → 表情包分类 */
 const EVENTS = [
   { id: 'nod',    emoji: '👍', name: '点头', keywords: ['yes', 'nodding', 'agreed'] },
   { id: 'shake',  emoji: '👎', name: '摇头', keywords: ['no', 'shaking head', 'nope'] },
@@ -66,19 +52,31 @@ const EVENTS = [
   { id: 'tongue', emoji: '😜', name: '吐舌', keywords: ['tongue out', 'goofy', 'bleh'] },
 ];
 
+/* 手部手势 → 表情包分类 */
+const HAND_GESTURES = [
+  { id: 'peace',   emoji: '✌️', name: '比耶', keywords: ['peace sign', 'victory', 'v for victory'] },
+  { id: 'thumbsup', emoji: '👍', name: '点赞', keywords: ['thumbs up', 'good job', 'like'] },
+  { id: 'ok',      emoji: '👌', name: 'OK 手势', keywords: ['ok hand', 'perfect', 'alright'] },
+  { id: 'wave',    emoji: '👋', name: '挥手', keywords: ['waving hello', 'bye', 'hello'] },
+  { id: 'fist',    emoji: '✊', name: '握拳', keywords: ['fist', 'fist bump', 'power'] },
+  { id: 'one',     emoji: '☝️', name: '一指', keywords: ['number one', 'first', 'hold on'] },
+];
+
 /* ---------------- 状态 ---------------- */
-let landmarker = null;
+let faceLandmarker = null;
+let handLandmarker = null;
 let video = null, overlay = null, ctx = null;
 let running = false;
 let rafId = null;
 let lastVideoTime = -1;
 let lastEmotion = null;
 let lastSearchAt = 0;
-let lastEventAt = {};          // id -> timestamp
+let lastEventAt = {};
 let fpsFrames = 0, fpsTimer = 0, fpsValue = 0;
 let bsUpdateAt = 0;
 const pitchHistory = [], yawHistory = [], rollHistory = [];
-let tiltSince = 0;             // 歪头连续计时
+let tiltSince = 0;
+let localMemes = {};   // 分类 -> [url,...]（来自 memes.json）
 
 /* ---------------- DOM ---------------- */
 const $ = id => document.getElementById(id);
@@ -96,27 +94,18 @@ const el = {
 };
 
 /* ---------------- 工具 ---------------- */
-function getKey() {
-  return (localStorage.getItem(CONFIG.keyStorage) || '').trim() || DEFAULT_GIPHY_KEY;
-}
-
+function getKey() { return (localStorage.getItem(CONFIG.keyStorage) || '').trim() || DEFAULT_GIPHY_KEY; }
 function toast(msg) {
   el.toast.textContent = msg;
   el.toast.classList.remove('hidden');
   clearTimeout(toast._t);
   toast._t = setTimeout(() => el.toast.classList.add('hidden'), 2600);
 }
-
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-
-// HTML 转义（用于渲染来自 API 的文本）
-function esc(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').split('"').join('&quot;');
-}
+function esc(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').split('"').join('&quot;'); }
 
 /* ============================================================
- * 1. 摄像头
+ * 1. 摄像头（带约束降级 + mediaDevices 诊断）
  * ============================================================ */
 function stopCamera() {
   if (el.video.srcObject) {
@@ -124,26 +113,23 @@ function stopCamera() {
     el.video.srcObject = null;
   }
 }
-
-// 停止识别循环（重启时调用，避免多个 rAF 循环叠加）
-function stopApp() {
+function stopLoop() {
   running = false;
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 }
-
-// 启动失败时，在摄像头区域持久显示错误信息（不会一闪而过）
-function showStartError(msg) {
-  el.placeholder.innerHTML = `
-    <div class="ph-icon">⚠️</div>
-    <p style="color:#fff;font-weight:600">启动失败</p>
-    <p class="ph-sub" style="max-width:300px">${msg}</p>
-    <p class="ph-sub">修复后可重新点击上方按钮重试</p>`;
-  el.placeholder.classList.remove('hidden');
+function closeLandmarkers() {
+  for (const m of [faceLandmarker, handLandmarker]) {
+    if (m) { try { m.close(); } catch (e) { /* ignore */ } }
+  }
+  faceLandmarker = null; handLandmarker = null;
 }
 
 async function getUserMediaWithFallback() {
-  // 优先带约束（前置摄像头+理想尺寸）；部分手机浏览器不支持 facingMode/尺寸，
-  // 会抛 OverconstrainedError —— 此时降级为裸请求，保证摄像头能开
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    const e = new Error('当前环境没有摄像头 API');
+    e.name = 'NoMediaDevices';
+    throw e;
+  }
   try {
     return await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -161,7 +147,6 @@ async function getUserMediaWithFallback() {
 async function initCamera() {
   stopCamera();
   const stream = await getUserMediaWithFallback();
-  // 先挂 onloadedmetadata 再赋值 srcObject，避免竞态
   const ready = new Promise(res => { el.video.onloadedmetadata = res; });
   el.video.srcObject = stream;
   await ready;
@@ -173,49 +158,80 @@ async function initCamera() {
 }
 
 /* ============================================================
- * 2. MediaPipe 初始化（本地 → CDN 回退）
+ * 2. AI 模型（人脸 + 手部；手部失败不阻塞人脸）
  * ============================================================ */
-async function createLandmarker(wasmRoot, modelPath, delegate) {
+async function createLM(Cls, wasmRoot, modelPath, delegate) {
   const fileset = await FilesetResolver.forVisionTasks(wasmRoot);
-  return await FaceLandmarker.createFromOptions(fileset, {
+  return await Cls.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: modelPath, delegate },
     runningMode: 'VIDEO',
-    numFaces: 1,
+    numFaces: Cls === FaceLandmarker ? 1 : undefined,
+    numHands: Cls === HandLandmarker ? 2 : undefined,
     outputFaceBlendshapes: true,
-    outputFacialTransformationMatrixes: true,
   });
 }
-
-async function initLandmarker() {
-  try {
-    return await createLandmarker(CONFIG.wasmRoot, CONFIG.modelPath, 'GPU');
-  } catch (e) {
-    console.warn('本地资源加载失败（可能被浏览器拦截），尝试 GPU/本地 重试…', e);
-    try {
-      return await createLandmarker(CONFIG.wasmRoot, CONFIG.modelPath, 'CPU');
-    } catch (e2) {
-      console.warn('本地加载失败，回退到 CDN 资源…', e2);
-      return await createLandmarker(CONFIG.cdnWasmRoot, CONFIG.cdnModel, 'GPU');
-    }
+async function createWithRetry(Cls, modelPath) {
+  const tries = [
+    [CONFIG.wasmRoot, modelPath, 'GPU'],
+    [CONFIG.wasmRoot, modelPath, 'CPU'],
+    [CONFIG.cdnWasmRoot, Cls === FaceLandmarker ? CONFIG.cdnFace : CONFIG.cdnHand, 'GPU'],
+  ];
+  let lastErr;
+  for (const [w, m, d] of tries) {
+    try { return await createLM(Cls, w, m, d); }
+    catch (e) { lastErr = e; console.warn('模型加载失败，尝试下一方案:', Cls.name, d, e); }
   }
+  throw lastErr || new Error(Cls.name + ' 模型加载失败');
+}
+async function initLandmarkers() {
+  const face = await createWithRetry(FaceLandmarker, CONFIG.faceModel);
+  let hand = null;
+  try { hand = await createWithRetry(HandLandmarker, CONFIG.handModel); }
+  catch (e) { console.warn('手部模型加载失败，仅使用人脸识别:', e); }
+  return { face, hand };
 }
 
 /* ============================================================
- * 3. 主循环
+ * 3. 本地流行表情包图库（memes.json 按分类登记）
+ * ============================================================ */
+async function loadLocalMemes() {
+  try {
+    const res = await fetch(CONFIG.memesJson, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    localMemes = j || {};
+    console.log('本地表情包图库已加载:', Object.keys(localMemes).length, '个分类');
+  } catch (e) {
+    console.warn('memes.json 加载失败（图库为空时回退 Giphy 搜索）:', e);
+    localMemes = {};
+  }
+}
+function pickLocalMeme(category) {
+  const list = localMemes[category];
+  if (list && list.length) return list[Math.floor(Math.random() * list.length)];
+  return null;
+}
+
+/* ============================================================
+ * 4. 主循环（人脸 + 手部）
  * ============================================================ */
 function loop(now) {
-  if (!running || !landmarker) return;
+  if (!running || !faceLandmarker) return;
   if (el.video.readyState >= 2 && el.video.currentTime !== lastVideoTime) {
     lastVideoTime = el.video.currentTime;
     try {
-      const result = landmarker.detectForVideo(el.video, now);
-      handleResult(result, now);
+      const t0 = performance.now();
+      const faceRes = faceLandmarker.detectForVideo(el.video, now);
+      handleFaceResult(faceRes, now);
+      if (handLandmarker) {
+        const handRes = handLandmarker.detectForVideo(el.video, now);
+        handleHandResult(handRes);
+      }
+      void t0;
     } catch (err) {
-      // 帧级异常（如 GPU 上下文丢失）：停止识别并提示，避免循环静默中断
       console.error('识别帧异常:', err);
-      stopApp();
-      try { landmarker.close(); } catch (e) { /* ignore */ }
-      landmarker = null;
+      stopLoop();
+      closeLandmarkers();
       el.startBtn.disabled = false;
       el.startBtn.textContent = '📷 开启摄像头';
       toast('⚠️ 识别出错，请重新开启：' + (err.message || err));
@@ -231,7 +247,8 @@ function loop(now) {
   rafId = requestAnimationFrame(loop);
 }
 
-function handleResult(result, now) {
+/* ---------------- 人脸结果 ---------------- */
+function handleFaceResult(result, now) {
   if (!result.faceLandmarks || result.faceLandmarks.length === 0) {
     el.faceStat.textContent = '人脸: 0';
     ctx && ctx.clearRect(0, 0, overlay.width, overlay.height);
@@ -243,38 +260,40 @@ function handleResult(result, now) {
   const scores = getScores(result.faceBlendshapes ? result.faceBlendshapes[0] : []);
   const angles = calcAngles(lm);
 
-  // 画网格
-  drawLandmarks(lm, angles);
+  drawFace(lm, angles);
 
-  // 实时角度
   el.angleStat.textContent =
     `roll: ${angles.roll.toFixed(0)}°  pitch: ${angles.pitch.toFixed(0)}  yaw: ${angles.yaw.toFixed(0)}`;
 
-  // 更新数值条（限频 100ms）
-  if (now - bsUpdateAt > 100) {
-    bsUpdateAt = now;
-    updateBars(scores);
-  }
+  if (now - bsUpdateAt > 100) { bsUpdateAt = now; updateBars(scores); }
 
-  // 动作检测
   const evt = detectEvent(scores, angles, now);
-
-  // 情绪判定
   const emotion = pickEmotion(scores);
 
-  // 情绪变化 → 触发搜索
   if (!lastEmotion || emotion.id !== lastEmotion.id) {
     lastEmotion = emotion;
     setCurrentUI(emotion);
-    triggerSearch(emotion.keywords, `${emotion.emoji} ${emotion.name}`, now);
+    triggerMeme(emotion.id, `${emotion.emoji} ${emotion.name}`, emotion.keywords, now);
   } else {
     setCurrentUI(emotion);
   }
 
-  // 动作事件 → 触发搜索（与情绪分开，冷却更严格）
   if (evt) {
-    logEvent(evt, now);
-    triggerSearch(evt.keywords, `${evt.emoji} ${evt.name}`, now, true);
+    logEvent(evt);
+    triggerMeme(evt.id, `${evt.emoji} ${evt.name}`, evt.keywords, now);
+  }
+}
+
+/* ---------------- 手部结果 ---------------- */
+function handleHandResult(result) {
+  const hands = result.landmarks || [];
+  if (hands.length) drawHands(hands);
+  for (const lm of hands) {
+    const g = detectHandGesture(lm);
+    if (g) {
+      logEvent(g);
+      triggerMeme(g.id, `${g.emoji} ${g.name}`, g.keywords, performance.now());
+    }
   }
 }
 
@@ -294,14 +313,12 @@ function getScores(bs) {
     eyeWide: max('eyeWideLeft', 'eyeWideRight'),
     eyeBlink: max('eyeBlinkLeft', 'eyeBlinkRight'),
     tongueOut: m.tongueOut || 0,
-    smileL: m.mouthSmileLeft || 0, smileR: m.mouthSmileRight || 0,
-    browInnerUpL: m.browInnerUp || 0,
   };
 }
 
-/* ---------------- 头部角度（用关键点估算） ---------------- */
+/* ---------------- 头部角度 ---------------- */
 function calcAngles(lm) {
-  const L = lm[234], R = lm[454], N = lm[1];          // 左耳 / 右耳 / 鼻尖
+  const L = lm[234], R = lm[454], N = lm[1];
   const midX = (L.x + R.x) / 2, midY = (L.y + R.y) / 2;
   const dist = Math.hypot(R.x - L.x, R.y - L.y) || 1e-6;
   const roll = Math.atan2(R.y - L.y, R.x - L.x) * 180 / Math.PI;
@@ -312,13 +329,11 @@ function calcAngles(lm) {
   };
 }
 
-/* ---------------- 动作事件检测 ---------------- */
+/* ---------------- 头部动作检测 ---------------- */
 function pushSample(arr, v, t) {
   arr.push({ v, t });
   while (arr.length && t - arr[0].t > 1200) arr.shift();
 }
-
-// 检测窗口内是否出现“符号翻转≥minFlips 次”的振荡
 function detectOscillation(arr, threshold, minFlips) {
   if (arr.length < 12) return false;
   const mean = arr.reduce((s, p) => s + p.v, 0) / arr.length;
@@ -331,38 +346,25 @@ function detectOscillation(arr, threshold, minFlips) {
   }
   return flips >= minFlips && maxAmp > threshold * 1.5;
 }
-
 function detectEvent(scores, angles, now) {
-  // 点头 / 摇头：时序振荡
   pushSample(pitchHistory, angles.pitch, now);
   pushSample(yawHistory, angles.yaw, now);
-  if (detectOscillation(pitchHistory, 6, 2)) {
-    pitchHistory.length = 0;
-    return EVENT_OK('nod', now);
-  }
-  if (detectOscillation(yawHistory, 8, 2)) {
-    yawHistory.length = 0;
-    return EVENT_OK('shake', now);
-  }
+  if (detectOscillation(pitchHistory, 6, 2)) { pitchHistory.length = 0; return EVENT_OK('nod', now); }
+  if (detectOscillation(yawHistory, 8, 2)) { yawHistory.length = 0; return EVENT_OK('shake', now); }
 
-  // 歪头：|roll| > 18° 持续 0.5s
   pushSample(rollHistory, angles.roll, now);
   if (Math.abs(angles.roll) > 18) {
     if (!tiltSince) tiltSince = now;
-    else if (now - tiltSince > 450) {
-      tiltSince = 0;
-      rollHistory.length = 0;
-      return EVENT_OK('tilt', now);
-    }
+    else if (now - tiltSince > 450) { tiltSince = 0; rollHistory.length = 0; return EVENT_OK('tilt', now); }
   } else tiltSince = 0;
 
-  // 眨眼 / 吐舌：瞬时
   if (scores.eyeBlink > 0.6) return EVENT_OK('wink', now);
   if (scores.tongueOut > 0.5) return EVENT_OK('tongue', now);
   return null;
 
   function EVENT_OK(id, t) {
     const e = EVENTS.find(x => x.id === id);
+    if (!e) return null;
     if (lastEventAt[id] && t - lastEventAt[id] < CONFIG.eventCooldownMs) return null;
     lastEventAt[id] = t;
     return e;
@@ -380,19 +382,171 @@ function pickEmotion(s) {
 }
 
 /* ============================================================
- * 4. UI 更新
+ * 5. 手部手势识别（21 关键点规则）
+ * ============================================================ */
+const H = {
+  WRIST: 0, THUMB_CMC: 1, THUMB_MCP: 2, THUMB_IP: 3, THUMB_TIP: 4,
+  INDEX_MCP: 5, INDEX_PIP: 6, INDEX_DIP: 7, INDEX_TIP: 8,
+  MIDDLE_MCP: 9, MIDDLE_PIP: 10, MIDDLE_DIP: 11, MIDDLE_TIP: 12,
+  RING_MCP: 13, RING_PIP: 14, RING_DIP: 15, RING_TIP: 16,
+  PINKY_MCP: 17, PINKY_PIP: 18, PINKY_DIP: 19, PINKY_TIP: 20,
+};
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4], [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12], [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20], [0,17],
+];
+const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+function fingerExt(lm, tip, mcp) {
+  const w = lm[H.WRIST];
+  return d2(lm[tip], w) / (d2(lm[mcp], w) || 1e-6);
+}
+function detectHandGesture(lm) {
+  const ext = {
+    thumb: fingerExt(lm, H.THUMB_TIP, H.THUMB_MCP),
+    index: fingerExt(lm, H.INDEX_TIP, H.INDEX_MCP),
+    middle: fingerExt(lm, H.MIDDLE_TIP, H.MIDDLE_MCP),
+    ring: fingerExt(lm, H.RING_TIP, H.RING_MCP),
+    pinky: fingerExt(lm, H.PINKY_TIP, H.PINKY_MCP),
+  };
+  const straight = v => v > 1.3;
+  const bent = v => v < 1.05;
+
+  if (straight(ext.index) && straight(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('peace');
+  if (straight(ext.thumb) && bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('thumbsup');
+  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky) && !straight(ext.thumb)) return byId('ok');
+  if (bent(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('fist');
+  if (straight(ext.index) && bent(ext.middle) && bent(ext.ring) && bent(ext.pinky)) return byId('one');
+  if (straight(ext.index) && straight(ext.middle) && straight(ext.ring) && straight(ext.pinky)) return byId('wave');
+  return null;
+}
+function byId(id) { return HAND_GESTURES.find(g => g.id === id); }
+
+/* ============================================================
+ * 6. 表情包触发（本地图库优先 → Giphy 回退）
+ * ============================================================ */
+function triggerMeme(category, label, keywords, now) {
+  if (now - lastSearchAt < CONFIG.searchCooldownMs) return;
+  lastSearchAt = now;
+
+  const local = pickLocalMeme(category);
+  el.resultQuery.textContent = local ? `图库 · ${label}` : `Giphy · ${label}`;
+  if (local) {
+    setSearchingState('正在挑选流行表情包…');
+    setTimeout(() => showMemes([{ url: local, title: label }], label), 250);
+    return;
+  }
+  searchGiphy(keywords, label);
+}
+
+function setSearchingState(text) {
+  el.results.innerHTML = `<div class="hint big-hint"><div class="ph-icon">🎭</div><p>${text || '正在搜索…'}</p></div>`;
+}
+
+function showMemes(items, label) {
+  if (!items.length) { renderEmpty('😅 没有表情包，换个表情试试'); return; }
+  el.results.innerHTML = '';
+  for (const it of items) {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+    card.innerHTML = `<img src="${esc(it.url)}" alt="${esc(it.title || label)}" loading="lazy">`;
+    card.onclick = () => openModal(it.url);
+    el.results.appendChild(card);
+  }
+}
+
+async function searchGiphy(keywords, label) {
+  setSearchingState();
+  const key = getKey();
+  if (!key) {
+    renderEmpty('🔑 未配置 Giphy API Key — 点右上角「⚙️ 设置」填写');
+    el.keyBanner.classList.remove('hidden');
+    return;
+  }
+  try {
+    const q = pick(keywords);
+    const url = `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(key)}` +
+      `&q=${encodeURIComponent(q)}&limit=${CONFIG.limit}&rating=g&lang=en`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Giphy HTTP ${res.status}`);
+    const json = await res.json();
+    const items = (json.data || []).map(g => {
+      const img = g.images && (g.images.fixed_height_small || g.images.preview_gif || g.images.fixed_height);
+      return img && (img.url.startsWith('http://') || img.url.startsWith('https://'))
+        ? { url: img.url, title: g.title || label } : null;
+    }).filter(Boolean);
+    showMemes(items, label);
+  } catch (err) {
+    console.error('Giphy 搜索失败:', err);
+    renderEmpty('⚠️ 表情包搜索失败（网络不通或 Key 无效）');
+  }
+}
+
+function renderEmpty(msg) {
+  el.results.innerHTML = `<div class="hint big-hint"><div class="ph-icon">🎭</div><p>${msg}</p></div>`;
+}
+
+/* 页面加载时展示 Giphy 当下流行热榜（全球实时热门表情包） */
+async function loadTrending() {
+  const key = getKey();
+  if (!key) return;
+  try {
+    const url = `https://api.giphy.com/v1/gifs/trending?api_key=${encodeURIComponent(key)}&limit=8&rating=g`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const items = (json.data || []).map(g => {
+      const img = g.images && (g.images.fixed_height_small || g.images.preview_gif || g.images.fixed_height);
+      return img && (img.url.startsWith('http://') || img.url.startsWith('https://'))
+        ? { url: img.url, title: g.title || 'trending' } : null;
+    }).filter(Boolean);
+    if (items.length) {
+      el.resultQuery.textContent = '🔥 Giphy 当下流行';
+      showMemes(items, '当下流行');
+    }
+  } catch (e) {
+    console.warn('热榜加载失败（不影响识别）:', e);
+  }
+}
+
+/* ---------------- 大图预览 ---------------- */
+let currentGifUrl = '';
+function openModal(url) {
+  currentGifUrl = url || '';
+  el.modalImg.src = currentGifUrl;
+  el.openGiphyBtn.href = url || '#';
+  el.modal.classList.remove('hidden');
+}
+async function copyGifLink() {
+  if (!currentGifUrl) return;
+  try {
+    await navigator.clipboard.writeText(currentGifUrl);
+    toast('✅ 已复制表情包链接');
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = currentGifUrl;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    toast('✅ 已复制表情包链接');
+  }
+}
+
+/* ============================================================
+ * 7. UI
  * ============================================================ */
 function setCurrentUI(emotion) {
-  // 匹配强度实时刷新
   el.confidenceBar.style.width = `${Math.min(100, emotion.score * 100)}%`;
   el.confValue.textContent = `${Math.min(100, Math.round(emotion.score * 100))}%`;
   if (el.emotionName.textContent === emotion.name) return;
   el.emotionEmoji.textContent = emotion.emoji;
   el.emotionName.textContent = emotion.name;
   el.emotionDetail.textContent =
-    emotion.id === 'neutral' ? '表情放松中… 试试 微笑 / 张嘴 / 皱眉' : `匹配强度 ${Math.round(emotion.score * 100)}%`;
+    emotion.id === 'neutral' ? '表情放松中… 试试 微笑 / 张嘴 / 比耶 / 点赞' : `匹配强度 ${Math.round(emotion.score * 100)}%`;
   el.emotionEmoji.classList.remove('pop');
-  void el.emotionEmoji.offsetWidth; // 重触发动画
+  void el.emotionEmoji.offsetWidth;
   el.emotionEmoji.classList.add('pop');
 }
 
@@ -420,39 +574,26 @@ function logEvent(evt) {
   el.eventLog.querySelector('.hint')?.remove();
 }
 
-/* ---------------- 绘制 468 点网格 ---------------- */
-function drawLandmarks(lm, angles) {
+/* ---------------- 绘制 ---------------- */
+function drawFace(lm, angles) {
   const cw = overlay.width, ch = overlay.height;
   ctx.clearRect(0, 0, cw, ch);
   const pts = lm.map(p => ({ x: p.x * cw, y: p.y * ch }));
-
-  // 人脸轮廓（青色）
-  ctx.strokeStyle = 'rgba(79, 140, 255, 0.85)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 1.5;
   drawConnections(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, pts);
-
-  // 五官轮廓（霓虹粉）
-  ctx.strokeStyle = 'rgba(180, 77, 255, 0.85)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
   drawConnections(FaceLandmarker.FACE_LANDMARKS_CONTOURS, pts);
-
-  // 关键点
   ctx.fillStyle = 'rgba(255, 209, 102, 0.9)';
   for (const p of pts) ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
-
-  // 虹膜（468-477）
-  ctx.fillStyle = 'rgba(80, 220, 255, 0.95)';
-  for (let i = 468; i < Math.min(lm.length, 478); i++) {
-    ctx.fillRect(lm[i].x * cw - 2, lm[i].y * ch - 2, 4, 4);
-  }
-
-  // 歪头指示（右上角）
+  ctx.fillStyle = 'rgba(120, 220, 255, 0.95)';
+  for (let i = 468; i < Math.min(lm.length, 478); i++) ctx.fillRect(lm[i].x * cw - 2, lm[i].y * ch - 2, 4, 4);
   if (Math.abs(angles.roll) > 15) {
-    ctx.fillStyle = 'rgba(255, 209, 102, 0.95)';
-    ctx.font = '16px sans-serif';
+    ctx.fillStyle = 'rgba(255,209,102,0.95)';
+    ctx.font = '14px sans-serif';
     ctx.fillText(`歪头 ${angles.roll.toFixed(0)}°`, 12, 24);
   }
 }
-
 function drawConnections(conns, pts) {
   ctx.beginPath();
   for (const c of conns) {
@@ -463,93 +604,29 @@ function drawConnections(conns, pts) {
   }
   ctx.stroke();
 }
-
-/* ============================================================
- * 5. Giphy 搜索
- * ============================================================ */
-async function triggerSearch(keywords, label, now, isEvent = false) {
-  if (now - lastSearchAt < CONFIG.searchCooldownMs) return;
-  lastSearchAt = now;
-  const query = pick(keywords);
-  el.resultQuery.textContent = `“${query}”`;
-  setSearchingState();
-
-  const key = getKey();
-  if (!key) {
-    renderEmpty('🔑 未配置 Giphy API Key — 点右上角「⚙️ 设置」填写');
-    el.keyBanner.classList.remove('hidden');
-    return;
-  }
-
-  try {
-    const url = `https://api.giphy.com/v1/gifs/search?api_key=${encodeURIComponent(key)}` +
-      `&q=${encodeURIComponent(query)}&limit=${CONFIG.limit}&rating=g&lang=en`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Giphy HTTP ${res.status}`);
-    const json = await res.json();
-    renderResults(json.data || [], query, label);
-  } catch (err) {
-    console.error('Giphy 搜索失败:', err);
-    renderEmpty('⚠️ 搜索失败（网络不通或 Key 无效），请检查设置');
-  }
-}
-
-function setSearchingState() {
-  el.results.innerHTML = '<div class="hint big-hint"><div class="ph-icon">🔍</div><p>正在搜索…</p></div>';
-}
-
-function renderResults(gifs, query, label) {
-  if (!gifs.length) {
-    renderEmpty('😅 没有搜到结果，换个表情试试');
-    return;
-  }
-  el.results.innerHTML = '';
-  for (const g of gifs) {
-    const img = g.images && (g.images.fixed_height_small || g.images.preview_gif || g.images.fixed_height);
-    const srcOk = img && ((img.url || '').startsWith('http://') || (img.url || '').startsWith('https://'));
-    if (!img || !srcOk) continue;
-    const card = document.createElement('div');
-    card.className = 'result-card';
-    const title = esc((g.title || query).slice(0, 32) || query);
-    card.innerHTML = `<img src="${img.url}" alt="${esc(g.title || query)}" loading="lazy">
-      <div class="caption">${title}</div>`;
-    card.onclick = () => openModal(g, query);
-    el.results.appendChild(card);
-  }
-}
-
-function renderEmpty(msg) {
-  el.results.innerHTML = `<div class="hint big-hint"><div class="ph-icon">🖼️</div><p>${msg}</p></div>`;
-}
-
-/* ---------------- 大图预览 ---------------- */
-let currentGifUrl = '';
-function openModal(g, query) {
-  const img = g.images && (g.images.fixed_height || g.images.downsized_medium || g.images.original);
-  currentGifUrl = img ? img.url : '';
-  el.modalImg.src = currentGifUrl;
-  el.openGiphyBtn.href = g.url || `https://giphy.com/search/${encodeURIComponent(query)}`;
-  el.modal.classList.remove('hidden');
-}
-
-async function copyGifLink() {
-  if (!currentGifUrl) return;
-  try {
-    await navigator.clipboard.writeText(currentGifUrl);
-    toast('✅ 已复制 GIF 链接');
-  } catch {
-    const ta = document.createElement('textarea');
-    ta.value = currentGifUrl;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    toast('✅ 已复制 GIF 链接');
+function drawHands(hands) {
+  const cw = overlay.width, ch = overlay.height;
+  for (const lm of hands) {
+    const pts = lm.map(p => ({ x: p.x * cw, y: p.y * ch }));
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const [i, j] of HAND_CONNECTIONS) {
+      ctx.moveTo(pts[i].x, pts[i].y);
+      ctx.lineTo(pts[j].x, pts[j].y);
+    }
+    ctx.stroke();
+    for (let i = 0; i < pts.length; i++) {
+      ctx.fillStyle = i === H.WRIST ? '#ffd166' : 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, i === H.WRIST ? 5 : 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }
 
 /* ============================================================
- * 6. 设置面板（Giphy API Key）
+ * 8. 设置面板（Giphy API Key）
  * ============================================================ */
 function updateKeyStatus() {
   const has = !!getKey();
@@ -557,14 +634,10 @@ function updateKeyStatus() {
   el.keyStatus.classList.toggle('ok', has);
   el.keyBanner.classList.toggle('hidden', has);
 }
-
 async function testKey() {
   const key = el.keyInput.value.trim();
   el.keyTestResult.className = 'key-test-result';
-  if (!key) {
-    el.keyTestResult.textContent = '请先粘贴 API Key';
-    return;
-  }
+  if (!key) { el.keyTestResult.textContent = '请先粘贴 API Key'; return; }
   el.keyTestResult.textContent = '测试中…';
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
@@ -581,49 +654,87 @@ async function testKey() {
   } catch {
     el.keyTestResult.className = 'key-test-result err';
     el.keyTestResult.textContent = '✗ 无法连接 Giphy，请检查网络';
-  } finally {
-    clearTimeout(timer);
-  }
+  } finally { clearTimeout(timer); }
 }
 
 /* ============================================================
- * 7. 启动
+ * 9. 启动（摄像头 / 模型 分开诊断）
  * ============================================================ */
+function showCameraError(err) {
+  const ua = navigator.userAgent || '';
+  const msg = (
+    err.name === 'NoMediaDevices' ? '当前浏览器/地址没有摄像头 API。请用最新版 Chrome 或 Safari，并通过 https:// 或 localhost 访问'
+    : err.name === 'NotAllowedError' ? '摄像头权限被拒绝。请在浏览器地址栏点击 🔒 → 网站设置 → 摄像头 → 改为「允许」，然后刷新重试'
+    : err.name === 'NotFoundError' ? '未找到摄像头，请确认设备有摄像头且未被其他软件占用'
+    : err.name === 'SecurityError' ? '当前环境不允许使用摄像头（请用 HTTPS 或 localhost 访问）'
+    : `摄像头启动失败（${err.name || '未知错误'}）：${err.message || '请重试'}`);
+  el.placeholder.innerHTML = `
+    <div class="ph-icon">⚠️</div>
+    <p style="color:#fff;font-weight:600">摄像头启动失败</p>
+    <p class="ph-sub" style="max-width:320px">${msg}</p>
+    <p class="ph-sub" style="max-width:340px;font-size:11px;word-break:break-all;text-align:left;background:rgba(255,255,255,0.06);padding:8px 10px;border-radius:6px">
+      诊断：${err.name}<br>网址：${location.href}<br>浏览器：${ua.slice(0, 90)}
+    </p>
+    <p class="ph-sub">修复后可重新点击上方按钮重试</p>`;
+  el.placeholder.classList.remove('hidden');
+}
+function showModelError(err) {
+  el.placeholder.innerHTML = `
+    <div class="ph-icon">🛠️</div>
+    <p style="color:#fff;font-weight:600">AI 模型加载失败</p>
+    <p class="ph-sub" style="max-width:320px">摄像头已就绪，但 AI 模型加载失败：${err.name || '网络问题'}。请检查网络后刷新重试。</p>
+    <p class="ph-sub">（不会影响摄像头画面，重试即可）</p>`;
+  el.placeholder.classList.remove('hidden');
+}
+
 function setupUI() {
+  loadLocalMemes();
+  loadTrending();
+
   el.startBtn.addEventListener('click', async () => {
-    // 重启：停止旧的识别循环并释放 AI 模型资源
-    stopApp();
-    if (landmarker) {
-      try { landmarker.close(); } catch (e) { console.warn('关闭模型失败:', e); }
-      landmarker = null;
-    }
+    stopLoop();
+    closeLandmarkers();
     fpsFrames = 0; fpsTimer = 0; bsUpdateAt = 0;
+    pitchHistory.length = 0; yawHistory.length = 0; rollHistory.length = 0; tiltSince = 0;
     el.startBtn.disabled = true;
     el.startBtn.textContent = '⏳ 正在启动…';
     try {
-      await initCamera();
+      // ① 摄像头
+      try {
+        await initCamera();
+      } catch (err) {
+        console.error('摄像头失败:', err);
+        showCameraError(err);
+        el.startBtn.disabled = false;
+        el.startBtn.textContent = '📷 开启摄像头';
+        return;
+      }
+      // ② AI 模型
       el.startBtn.textContent = '⏳ 加载 AI 模型…';
-      landmarker = await initLandmarker();
-      el.startBtn.textContent = '🟢 识别中（点击可重启）';
+      let models;
+      try {
+        models = await initLandmarkers();
+      } catch (err) {
+        console.error('模型失败:', err);
+        showModelError(err);
+        el.startBtn.disabled = false;
+        el.startBtn.textContent = '📷 重新尝试';
+        return;
+      }
+      faceLandmarker = models.face;
+      handLandmarker = models.hand;
+      el.startBtn.textContent = handLandmarker ? '🟢 识别中（表情+手势）' : '🟢 识别中（仅表情）';
       running = true;
       rafId = requestAnimationFrame(loop);
-      toast('🎉 识别已启动！对着摄像头做表情吧');
+      toast(handLandmarker ? '🎉 识别已启动！做表情、比手势试试' : '🎉 识别已启动！做表情试试');
     } catch (err) {
       console.error(err);
       el.startBtn.disabled = false;
       el.startBtn.textContent = '📷 开启摄像头';
-      const msg = (
-        err.name === 'NotAllowedError' ? '摄像头权限被拒绝。请在浏览器地址栏点击 🔒 → 网站设置 → 摄像头 → 改为「允许」，然后刷新页面重试'
-        : err.name === 'NotFoundError' ? '未找到摄像头，请确认设备有摄像头且未被其他软件占用'
-        : err.name === 'SecurityError' ? '当前环境不允许使用摄像头（请用 HTTPS 或 localhost 访问）'
-        : err.name === 'TypeError' ? '浏览器不支持摄像头，请换用最新版 Safari / Chrome'
-        : err.message || '未知错误，请检查网络后重试');
-      toast('⚠️ 启动失败：' + msg);
-      showStartError(msg);
+      toast('⚠️ 启动失败：' + (err.message || err));
     }
   });
 
-  // 设置
   el.settingsBtn.addEventListener('click', () => {
     el.keyInput.value = getKey();
     el.keyTestResult.className = 'key-test-result';
@@ -641,7 +752,6 @@ function setupUI() {
   $('testKeyBtn').addEventListener('click', testKey);
   el.keyBannerLink.addEventListener('click', e => { e.preventDefault(); el.settingsBtn.click(); });
 
-  // 弹层关闭
   document.querySelectorAll('.modal-close').forEach(b =>
     b.addEventListener('click', () => $(b.dataset.close).classList.add('hidden')));
   for (const m of [el.modal, el.settingsModal]) {

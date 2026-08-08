@@ -102,6 +102,25 @@ Key 只保存在你的浏览器本地（localStorage），不会上传到任何�
 
 ---
 
+## 🖼️ 表情包图库（大库 · 中西方流行梗）
+
+**表情包从哪来（三层，自动降级）：**
+
+1. **内置流行梗图库**（`assets/memes/memes.json`）：已内置 **129 个 imgflip 欧美当下流行梗图**（Drake、Distracted Boyfriend、Sad Pablo Escobar…），按 19 个情绪/手势分类（happy / laugh / angry / peace / thumbsup / wave…）
+2. **Giphy 当下流行热榜**：页面打开即展示 Giphy 全球实时热门表情包（🔥）
+3. **Giphy 搜索兜底**：识别到某情绪/手势时，本地图库取不到就用梗化关键词搜 Giphy（数百万 GIF）
+
+**想加你自己喜欢的表情包（比如中文热梗）：**
+
+1. 把图片放进 `assets/memes/` 下（或任意位置）
+2. 编辑 `assets/memes/memes.json`，在对应分类加 URL 路径，例如：
+   ```json
+   { "happy": [ "assets/memes/happy/我的表情包.gif" ] }
+   ```
+3. 刷新页面即可；同分类图多张时会**随机**展示
+
+> 分类名：`happy laugh surprised angry sad disgusted fear neutral nod shake tilt wink tongue peace thumbsup ok wave fist one`
+
 ## 🎬 演示脚本（给老师展示时照着说）
 
 | 步骤 | 操作 | 页面表现 |
