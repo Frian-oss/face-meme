@@ -3,20 +3,20 @@
  * 人脸表情 + 头部动作 + 手部手势 → 本地流行图库 / Giphy 搜索
  * 摄像头与模型错误分开诊断
  * ============================================================ */
-import { FaceLandmarker, GestureRecognizer, FilesetResolver } from './assets/vision_bundle.js';
+import { FaceLandmarker, HandLandmarker, FilesetResolver } from './assets/vision_bundle.js';
 import { CULTURE_GESTURES, HEAD_CULTURE } from './culture.js';
 
 /* ---------------- 配置 ---------------- */
 const CONFIG = {
   faceModel: 'assets/face_landmarker.task',
-  gestureModel: 'assets/gesture_recognizer.task',
+  handModel: 'assets/hand_landmarker.task',
   wasmRoot: 'assets/wasm/',
   cdnWasmRoot: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm',
   cdnFace: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task',
-  cdnGesture: 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task',
+  cdnHand: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',
   // jsDelivr 仓库 CDN：国内可达性比 GitHub Pages / Google 更好
   cdnFaceJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/face_landmarker.task',
-  cdnGestureJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/gesture_recognizer.task',
+  cdnHandJsdelivr: 'https://cdn.jsdelivr.net/gh/Frian-oss/face-meme@main/assets/hand_landmarker.task',
   memesJson: 'assets/memes/memes.json',
   limit: 12,
   searchCooldownMs: 900,
@@ -68,7 +68,7 @@ const HAND_GESTURES = [
 
 /* ---------------- 状态 ---------------- */
 let faceLandmarker = null;
-let gestureRecognizer = null;
+let handLandmarker = null;
 let overlay = null, ctx = null;
 let running = false;
 let rafId = null;
@@ -104,6 +104,14 @@ const el = {
 
 /* ---------------- 工具 ---------------- */
 function getKey() { return (localStorage.getItem(CONFIG.keyStorage) || '').trim() || DEFAULT_GIPHY_KEY; }
+
+// 全局错误显示：任何 JS 异常都弹出，便于定位"不能运行"类问题
+window.addEventListener('error', e => {
+  const msg = (e && e.message) ? e.message : String(e);
+  console.error('[global error]', msg);
+  const box = document.getElementById('toast');
+  if (box) { box.textContent = '⚠️ ' + msg; box.classList.remove('hidden'); }
+});
 function toast(msg) {
   el.toast.textContent = msg;
   el.toast.classList.remove('hidden');
@@ -127,10 +135,10 @@ function stopLoop() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 }
 function closeLandmarkers() {
-  for (const m of [faceLandmarker, gestureRecognizer]) {
+  for (const m of [faceLandmarker, handLandmarker]) {
     if (m) { try { m.close(); } catch (e) { /* ignore */ } }
   }
-  faceLandmarker = null; gestureRecognizer = null;
+  faceLandmarker = null; handLandmarker = null;
 }
 
 async function getUserMediaWithFallback() {
@@ -177,7 +185,7 @@ async function createLM(Cls, wasmRoot, modelPath, delegate) {
     runningMode: 'VIDEO',
   };
   if (Cls === FaceLandmarker) { opts.numFaces = 1; opts.outputFaceBlendshapes = true; }
-  if (Cls === GestureRecognizer) { opts.numHands = 2; }
+  if (Cls === HandLandmarker) { opts.numHands = 2; }
   return await Cls.createFromOptions(fileset, opts);
 }
 async function createWithRetry(Cls, localPath, cdnPaths) {
@@ -198,14 +206,14 @@ async function initLandmarkers() {
     [CONFIG.cdnWasmRoot, CONFIG.cdnFaceJsdelivr],
     [CONFIG.cdnWasmRoot, CONFIG.cdnFace],
   ]);
-  let gesture = null;
+  let hand = null;
   try {
-    gesture = await createWithRetry(GestureRecognizer, CONFIG.gestureModel, [
-      [CONFIG.cdnWasmRoot, CONFIG.cdnGestureJsdelivr],
-      [CONFIG.cdnWasmRoot, CONFIG.cdnGesture],
+    hand = await createWithRetry(HandLandmarker, CONFIG.handModel, [
+      [CONFIG.cdnWasmRoot, CONFIG.cdnHandJsdelivr],
+      [CONFIG.cdnWasmRoot, CONFIG.cdnHand],
     ]);
-  } catch (e) { console.warn('手势模型加载失败，仅使用人脸识别:', e); }
-  return { face, gesture };
+  } catch (e) { console.warn('手部模型加载失败，仅使用人脸识别:', e); }
+  return { face, hand };
 }
 
 /* ============================================================
@@ -240,9 +248,9 @@ function loop(now) {
       const t0 = performance.now();
       const faceRes = faceLandmarker.detectForVideo(el.video, now);
       handleFaceResult(faceRes, now);
-      if (gestureRecognizer) {
-        const handRes = gestureRecognizer.detectForVideo(el.video, now);
-        handleGestureResult(handRes);
+      if (handLandmarker) {
+        const handRes = handLandmarker.detectForVideo(el.video, now);
+        handleHandResult(handRes);
       }
       void t0;
     } catch (err) {
@@ -314,21 +322,8 @@ function handleFaceResult(result, now) {
 /* 手部稳定化状态机：3 帧确认触发；手势保持期间不重复触发（只切换变化） */
 let handState = { id: null, streak: 0, fired: false, none: 0, previewUntil: 0 };
 
-/* 官方手势分类器名称 → 我们的手势 id */
-function mapGesture(name) {
-  return {
-    Closed_Fist: 'fist',
-    Open_Palm: 'wave',
-    Pointing_Up: 'one',
-    Thumb_Up: 'thumbsup',
-    Victory: 'peace',
-    ILoveYou: 'ily',
-  }[name] || null;
-}
-
-function handleGestureResult(result) {
+function handleHandResult(result) {
   const hands = (result && Array.isArray(result.landmarks)) ? result.landmarks : [];
-  const gestures = (result && Array.isArray(result.gestures)) ? result.gestures : [];
   if (hands.length) drawHands(hands);
   const now = performance.now();
   const st = handState;
@@ -336,29 +331,20 @@ function handleGestureResult(result) {
   // 手动预览锁：图鉴/快捷键预览期间不响应摄像头识别
   if (now < st.previewUntil) return;
 
-  // ① 官方训练模型优先（6 种高精度手势），② 手工规则兜底（pinch/heart/shaka/middle/three/ok）
-  let id = null;
   let det = null;
-  for (let i = 0; i < hands.length; i++) {
-    const lm = hands[i];
+  for (const lm of hands) {
     if (!Array.isArray(lm) || lm.length < 21) continue;
-    const cats = gestures[i] && gestures[i].categories;
-    if (cats && cats.length && cats[0].score > 0.55) {
-      const mapped = mapGesture(cats[0].categoryName);
-      if (mapped) { id = mapped; break; }
-      continue;   // 官方明确但无映射（如 Thumb_Down）→ 跳过该手，避免误判
-    }
     det = detectHandGesture(lm);
-    if (det) { id = det.id; break; }
+    if (det) break;
   }
+  const id = det ? det.id : null;
 
   // 调试信息：在画面左下显示识别到的手势与手指伸展度
   if (ctx && hands.length) {
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = '12px monospace';
     const e = det ? det.ext : {};
-    const src = det ? 'rule' : (id ? 'model' : '');
-    const txt = `hand: ${id || '—'}${src ? ' [' + src + ']' : ''}  t:${(e.thumb||0).toFixed(2)} i:${(e.index||0).toFixed(2)} m:${(e.middle||0).toFixed(2)} r:${(e.ring||0).toFixed(2)} p:${(e.pinky||0).toFixed(2)}`;
+    const txt = `hand: ${id || '—'}  t:${(e.thumb||0).toFixed(2)} i:${(e.index||0).toFixed(2)} m:${(e.middle||0).toFixed(2)} r:${(e.ring||0).toFixed(2)} p:${(e.pinky||0).toFixed(2)}`;
     ctx.fillText(txt, 10, overlay.height - 16);
   }
 
@@ -959,11 +945,11 @@ function setupUI() {
         return;
       }
       faceLandmarker = models.face;
-      gestureRecognizer = models.gesture;
-      el.startBtn.textContent = gestureRecognizer ? '🟢 Recognizing — face & gestures' : '🟢 Recognizing — face only';
+      handLandmarker = models.hand;
+      el.startBtn.textContent = handLandmarker ? '🟢 Recognizing — face & gestures' : '🟢 Recognizing — face only';
       running = true;
       rafId = requestAnimationFrame(loop);
-      toast(gestureRecognizer ? '🎉 Ready! Make a face or gesture' : '🎉 Ready! Make a face');
+      toast(handLandmarker ? '🎉 Ready! Make a face or gesture' : '🎉 Ready! Make a face');
     } catch (err) {
       console.error(err);
       el.startBtn.disabled = false;
