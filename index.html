@@ -96,6 +96,15 @@
         </div>
       </div>
     </div>
+
+    <div class="chat-panel">
+      <h3>Chat <span class="muted">(display only · auto-clears · up to 4 messages)</span></h3>
+      <div id="chatLog" class="chat-log"><div class="hint">send a message, or click a meme → “Send to chat”</div></div>
+      <div class="chat-input-row">
+        <input id="chatInput" type="text" placeholder="type a message…" autocomplete="off">
+        <button id="chatSendBtn" class="btn ghost small">Send</button>
+      </div>
+    </div>
   </section>
 
   <!-- Culture Mode view -->
@@ -128,6 +137,7 @@
     <button class="modal-close" data-close="modal">✕</button>
     <img id="modalImg" alt="meme preview">
     <div class="modal-actions">
+      <button id="chatSendMemeBtn" class="btn ghost">💬 Send to chat</button>
       <button id="copyLinkBtn" class="btn primary">🔗 Copy link</button>
       <a id="openGiphyBtn" class="btn ghost" target="_blank" rel="noopener">↗ Open on Giphy</a>
     </div>

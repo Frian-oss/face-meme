@@ -99,6 +99,7 @@ const el = {
   tabMeme: $('tabMeme'), tabCulture: $('tabCulture'),
   memePanel: $('memePanel'), culturePanel: $('culturePanel'),
   cultureCurrent: $('cultureCurrent'), cultureGallery: $('cultureGallery'),
+  chatLog: $('chatLog'), chatInput: $('chatInput'), chatSendBtn: $('chatSendBtn'), chatSendMemeBtn: $('chatSendMemeBtn'),
   toast: $('toast'),
 };
 
@@ -120,6 +121,38 @@ function toast(msg) {
 }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function esc(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').split('"').join('&quot;'); }
+
+/* ============================================================
+ * 聊天窗（纯展示）：打字或表情包，最多 4 条，自动消失，不收集数据
+ * ============================================================ */
+function addChat(item) {
+  // 最多同时 4 条：新消息进来时移除最旧
+  while (el.chatLog.querySelectorAll('.chat-msg').length >= 4) {
+    el.chatLog.firstElementChild.remove();
+  }
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  if (item.type === 'meme') {
+    div.innerHTML = `<img src="${esc(item.url)}" alt="meme">`;
+  } else {
+    div.textContent = item.text;
+  }
+  el.chatLog.appendChild(div);
+  el.chatLog.querySelector('.hint')?.remove();
+  el.chatLog.scrollTop = el.chatLog.scrollHeight;
+  // 显示约 9 秒后淡出消失
+  setTimeout(() => {
+    div.classList.add('fade');
+    setTimeout(() => div.remove(), 600);
+  }, 9000);
+}
+
+function sendTextChat() {
+  const t = el.chatInput.value.trim();
+  if (!t) return;
+  addChat({ type: 'text', text: t });
+  el.chatInput.value = '';
+}
 
 /* ============================================================
  * 1. 摄像头（带约束降级 + mediaDevices 诊断）
@@ -981,6 +1014,16 @@ function setupUI() {
     m.addEventListener('click', e => { if (e.target === m) m.classList.add('hidden'); });
   }
   el.copyLinkBtn.addEventListener('click', copyGifLink);
+
+  // 聊天窗
+  el.chatSendBtn.addEventListener('click', sendTextChat);
+  el.chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendTextChat(); });
+  el.chatSendMemeBtn.addEventListener('click', () => {
+    if (!currentGifUrl) return;
+    addChat({ type: 'meme', url: currentGifUrl });
+    el.modal.classList.add('hidden');
+    toast('💬 meme sent to chat');
+  });
 
   setupCultureMode();
   updateKeyStatus();
