@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>E7 Project — Face it. Gesture it.</title>
 <meta name="description" content="Real-time gesture recognition: matched memes, and the same gesture decoded across cultures.">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Special+Elite&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -22,11 +25,12 @@
 
 <header class="topbar">
   <div class="brand">
-    <span class="logo">◉</span>
+    <span class="logo">✌️</span>
     <div>
-      <h1>E7 PROJECT</h1>
-      <p class="subtitle">face it · gesture it · translate</p>
+      <h1 class="brand-title">E7 Project</h1>
+      <p class="subtitle">face → meme → meaning</p>
     </div>
+    <span class="sticker">made by humans + a webcam</span>
   </div>
   <div class="topbar-actions">
     <span id="keyStatus" class="badge">Key: off</span>
@@ -47,9 +51,9 @@
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
       <div id="videoPlaceholder" class="video-placeholder">
-        <div class="ph-icon">◉</div>
-        <p>Camera preview appears here</p>
-        <p class="ph-sub">Allow camera access when prompted</p>
+        <div class="ph-icon">👀</div>
+        <p>your face goes here</p>
+        <p class="ph-sub">psst — allow the camera when asked</p>
       </div>
     </div>
 
@@ -59,7 +63,7 @@
       <span class="stat" id="angleStat">roll: --° pitch: --° yaw: --°</span>
     </div>
 
-    <button id="startBtn" class="btn primary big">📷 Start Camera</button>
+    <button id="startBtn" class="btn primary big">📷 start me up</button>
 
     <div class="bs-panel">
       <h3>Live face signals <span class="muted">(blendshapes)</span></h3>
@@ -73,7 +77,7 @@
       <div class="current-left">
         <div id="emotionEmoji" class="emotion-emoji">🙂</div>
         <div id="emotionName" class="emotion-name">waiting</div>
-        <div id="emotionDetail" class="emotion-detail">start the camera and make a face</div>
+        <div id="emotionDetail" class="emotion-detail">go on — make a face 🙃</div>
       </div>
       <div class="current-right">
         <div class="conf-label">confidence</div>
@@ -83,25 +87,25 @@
     </div>
 
     <div class="event-box">
-      <h3>Events <span class="muted">(nod / shake / tilt / wink / tongue / gestures)</span></h3>
-      <div id="eventLog" class="event-log"><div class="hint">your actions are logged here</div></div>
+      <h3>Events <span class="muted">(nod · shake · tilt · wink · tongue · gestures)</span></h3>
+      <div id="eventLog" class="event-log"><div class="hint">every nod, wink &amp; flip gets logged</div></div>
     </div>
 
     <div class="result-box">
       <h3>Matched memes <span id="resultQuery" class="query-tag"></span></h3>
       <div id="results" class="results">
         <div class="hint big-hint">
-          <div class="ph-icon">◉</div>
-          <p>make a face or gesture,<br>the closest meme appears here</p>
+          <div class="ph-icon">👀</div>
+          <p>make a face or gesture,<br>the closest meme pops up here</p>
         </div>
       </div>
     </div>
 
     <div class="chat-panel">
-      <h3>Chat <span class="muted">(display only · auto-clears · up to 4 messages)</span></h3>
-      <div id="chatLog" class="chat-log"><div class="hint">send a message, or click a meme → “Send to chat”</div></div>
+      <h3>Chat <span class="muted">(display only · auto-clears · max 4)</span></h3>
+      <div id="chatLog" class="chat-log"><div class="hint">type something, or click a meme → send it 💬</div></div>
       <div class="chat-input-row">
-        <input id="chatInput" type="text" placeholder="type a message…" autocomplete="off">
+        <input id="chatInput" type="text" placeholder="say something fun…" autocomplete="off">
         <button id="chatSendBtn" class="btn ghost small">Send</button>
       </div>
     </div>
@@ -127,8 +131,9 @@
 </main>
 
 <footer class="footer">
-  <p>🔒 All recognition runs <b>locally in your browser</b> (MediaPipe). Your camera feed is never uploaded.</p>
+  <p>🔒 All recognition runs <b>locally in your browser</b> (MediaPipe) — your camera feed is never uploaded.</p>
   <p>E7 Project — an RCA group project on how meaning moves.</p>
+  <p class="sig">made with ☕ + a webcam + too many memes</p>
 </footer>
 
 <!-- full preview modal -->
@@ -174,6 +179,6 @@
     }
   })();
 </script>
-<script type="module" src="app.js?v=4"></script>
+<script type="module" src="app.js?v=5"></script>
 </body>
 </html>

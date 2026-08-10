@@ -29,21 +29,21 @@ const DEFAULT_GIPHY_KEY = 'e1mauv8DEXyy3IEwcNorFXna28U9zC8u';
 
 /* ---------------- facial expression → meme category ---------------- */
 const EMOTIONS = [
-  { id: 'laugh',    emoji: '😂', name: 'laughing', prio: 6, keywords: ['laughing', 'laughing hard', 'lol'],
+  { id: 'laugh',    emoji: '😂', name: 'laughing', prio: 6, keywords: ['laughing', 'laughing hard', 'funny meme'],
     check: s => s.mouthSmile > 0.35 && s.jawOpen > 0.3 ? 0.8 : 0 },
-  { id: 'happy',    emoji: '😄', name: 'happy', prio: 5, keywords: ['happy', 'smiling', 'happy dance'],
+  { id: 'happy',    emoji: '😄', name: 'happy', prio: 5, keywords: ['happy', 'happy dance', 'celebration'],
     check: s => s.mouthSmile > 0.15 ? Math.min(1, s.mouthSmile) : 0 },
-  { id: 'surprised', emoji: '😮', name: 'surprised', prio: 5, keywords: ['surprised', 'shocked', 'wow'],
+  { id: 'surprised', emoji: '😮', name: 'surprised', prio: 5, keywords: ['surprised', 'anime reaction', 'wow'],
     check: s => (s.jawOpen > 0.25 && s.browInnerUp > 0.18) ? Math.max(s.jawOpen, s.browInnerUp) : 0 },
-  { id: 'angry',    emoji: '😠', name: 'angry', prio: 4, keywords: ['angry', 'mad', 'furious'],
+  { id: 'angry',    emoji: '😠', name: 'angry', prio: 4, keywords: ['angry', 'mad', 'karen'],
     check: s => (s.browDown > 0.25 && s.mouthPress > 0.1) ? s.browDown : 0 },
   { id: 'sad',      emoji: '😢', name: 'sad', prio: 3, keywords: ['sad', 'crying', 'sad cat'],
     check: s => s.mouthFrown > 0.2 ? Math.min(1, s.mouthFrown + s.browInnerUp * 0.5) : 0 },
   { id: 'disgusted', emoji: '🤢', name: 'disgusted', prio: 3, keywords: ['disgusted', 'gross', 'eww'],
     check: s => s.noseSneer > 0.22 ? s.noseSneer : 0 },
-  { id: 'fear',     emoji: '😨', name: 'scared', prio: 3, keywords: ['scared', 'afraid', 'scream'],
+  { id: 'fear',     emoji: '😨', name: 'scared', prio: 3, keywords: ['scared', 'scream', 'horror reaction'],
     check: s => (s.eyeWide > 0.25 && s.browInnerUp > 0.22 && s.jawOpen > 0.12) ? s.eyeWide : 0 },
-  { id: 'neutral',  emoji: '🙂', name: 'neutral', prio: 1, keywords: ['chill', 'relaxed', 'cool'],
+  { id: 'neutral',  emoji: '🙂', name: 'neutral', prio: 1, keywords: ['chill', 'chill guy', 'cool'],
     check: () => 0.5 },
 ];
 
@@ -51,9 +51,9 @@ const EMOTIONS = [
 const EVENTS = [
   { id: 'nod',    emoji: '👍', name: 'nodding', keywords: ['nodding', 'yes', 'agree'] },
   { id: 'shake',  emoji: '👎', name: 'shaking head', keywords: ['shaking head', 'no', 'nope'] },
-  { id: 'tilt',   emoji: '🙃', name: 'head tilt', keywords: ['confused', 'head tilt', 'what'] },
-  { id: 'wink',   emoji: '😉', name: 'wink', keywords: ['wink', 'flirting'] },
-  { id: 'tongue', emoji: '😜', name: 'tongue out', keywords: ['tongue out', 'goofy', 'bleh'] },
+  { id: 'tilt',   emoji: '🙃', name: 'head tilt', keywords: ['confused', 'what', 'head tilt'] },
+  { id: 'wink',   emoji: '😉', name: 'wink', keywords: ['wink', 'winking'] },
+  { id: 'tongue', emoji: '😜', name: 'tongue out', keywords: ['tongue out', 'blep', 'goofy'] },
 ];
 
 /* hand gestures → meme category */
@@ -62,8 +62,8 @@ const HAND_GESTURES = [
   { id: 'thumbsup', emoji: '👍', name: 'thumbs up', keywords: ['thumbs up', 'good job', 'like'] },
   { id: 'ok',      emoji: '👌', name: 'OK', keywords: ['ok hand', 'perfect', 'alright'] },
   { id: 'wave',    emoji: '👋', name: 'waving', keywords: ['waving', 'hello', 'bye'] },
-  { id: 'fist',    emoji: '✊', name: 'fist', keywords: ['fist', 'fist bump', 'power'] },
-  { id: 'one',     emoji: '☝️', name: 'number one', keywords: ['number one', 'first', 'one'] },
+  { id: 'fist',    emoji: '✊', name: 'fist', keywords: ['fist bump', 'power', 'punch'] },
+  { id: 'one',     emoji: '☝️', name: 'number one', keywords: ['number one', 'first place', 'one'] },
 ];
 
 /* ---------------- 状态 ---------------- */
@@ -680,7 +680,7 @@ async function copyGifLink() {
   if (!currentGifUrl) return;
   try {
     await navigator.clipboard.writeText(currentGifUrl);
-    toast('✅ link copied');
+    toast('✅ copied — go share it!');
   } catch {
     const ta = document.createElement('textarea');
     ta.value = currentGifUrl;
@@ -688,7 +688,7 @@ async function copyGifLink() {
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    toast('✅ link copied');
+    toast('✅ copied — go share it!');
   }
 }
 
@@ -953,7 +953,7 @@ function setupUI() {
     fpsFrames = 0; fpsTimer = 0; bsUpdateAt = 0;
     pitchHistory.length = 0; yawHistory.length = 0; rollHistory.length = 0; tiltSince = 0;
     el.startBtn.disabled = true;
-    el.startBtn.textContent = '⏳ Starting…';
+    el.startBtn.textContent = '⏳ starting…';
     try {
       // ① 摄像头
       try {
@@ -979,15 +979,15 @@ function setupUI() {
       }
       faceLandmarker = models.face;
       handLandmarker = models.hand;
-      el.startBtn.textContent = handLandmarker ? '🟢 Recognizing — face & gestures' : '🟢 Recognizing — face only';
+      el.startBtn.textContent = handLandmarker ? '🟢 recognizing — face & gestures' : '🟢 recognizing — face only';
       running = true;
       rafId = requestAnimationFrame(loop);
-      toast(handLandmarker ? '🎉 Ready! Make a face or gesture' : '🎉 Ready! Make a face');
+      toast(handLandmarker ? '🎉 ready! make a face or gesture' : '🎉 ready! make a face');
     } catch (err) {
       console.error(err);
       el.startBtn.disabled = false;
-      el.startBtn.textContent = '📷 Start Camera';
-      toast('⚠️ Failed to start: ' + (err.message || err));
+      el.startBtn.textContent = '📷 start me up';
+      toast('⚠️ failed to start: ' + (err.message || err));
     }
   });
 
@@ -1003,7 +1003,7 @@ function setupUI() {
     else localStorage.removeItem(CONFIG.keyStorage);
     updateKeyStatus();
     el.settingsModal.classList.add('hidden');
-    toast(key ? '✅ Key saved' : 'Key cleared');
+    toast(key ? '✅ key saved' : 'key cleared');
   });
   $('testKeyBtn').addEventListener('click', testKey);
   el.keyBannerLink.addEventListener('click', e => { e.preventDefault(); el.settingsBtn.click(); });
