@@ -560,7 +560,25 @@ function detectHandGesture(lm) {
 
 /* ============================================================
  * 6. 表情包触发（本地图库优先 → Giphy 回退）
+ *    结果缓存：同一类别 60 秒内重复触发直接复用，不重复消耗 Giphy 配额
  * ============================================================ */
+const gifCache = new Map();       // category -> { items, at }
+const GIF_CACHE_TTL = 60000;      // 60s
+const TRENDING_TTL = 5 * 60 * 1000; // 热榜 5 分钟
+
+function getCachedMeme(category, ttl) {
+  const c = gifCache.get(category);
+  if (c && Date.now() - c.at < (ttl || GIF_CACHE_TTL)) return c.items;
+  return null;
+}
+function setCachedMeme(category, items) {
+  gifCache.set(category, { items, at: Date.now() });
+  if (gifCache.size > 30) { // 防止无限增长
+    const oldest = gifCache.keys().next().value;
+    gifCache.delete(oldest);
+  }
+}
+
 function triggerMeme(category, label, keywords, now) {
   if (now - lastSearchAt < CONFIG.searchCooldownMs) return;
   lastSearchAt = now;
@@ -572,7 +590,14 @@ function triggerMeme(category, label, keywords, now) {
     setTimeout(() => showMemes([{ url: local, title: label }], label), 250);
     return;
   }
-  searchGiphy(keywords, label);
+
+  // 缓存命中：直接复用上次结果，不请求 Giphy
+  const cached = getCachedMeme(category);
+  if (cached) {
+    showMemes(cached, label);
+    return;
+  }
+  searchGiphy(keywords, label, category);
 }
 
 function setSearchingState(text) {
@@ -602,7 +627,7 @@ function shuffle(arr) {
   return arr;
 }
 
-async function searchGiphy(keywords, label) {
+async function searchGiphy(keywords, label, cacheKey) {
   setSearchingState();
   const key = getKey();
   if (!key) {
@@ -635,6 +660,7 @@ async function searchGiphy(keywords, label) {
     while (recentUrls.size > 40) recentUrls.delete(recentUrls.values().next().value);
 
     showMemes(items, label);
+    if (cacheKey) setCachedMeme(cacheKey, items);
   } catch (err) {
     console.error('Giphy 搜索失败:', err);
     renderEmpty('⚠️ meme search failed (network or key)');
@@ -645,10 +671,16 @@ function renderEmpty(msg) {
   el.results.innerHTML = `<div class="hint big-hint"><div class="ph-icon">🎭</div><p>${msg}</p></div>`;
 }
 
-/* 页面加载时展示 Giphy 当下流行热榜（全球实时热门表情包） */
+/* 页面加载时展示 Giphy 当下流行热榜（5 分钟缓存，避免每次刷新都消耗配额） */
 async function loadTrending() {
   const key = getKey();
   if (!key) return;
+  const cached = getCachedMeme('trending', TRENDING_TTL);
+  if (cached) {
+    showMemes(cached, 'trending');
+    el.resultQuery.textContent = '🔥 Trending on Giphy';
+    return;
+  }
   try {
     const url = `https://api.giphy.com/v1/gifs/trending?api_key=${encodeURIComponent(key)}&limit=8&rating=g`;
     const res = await fetch(url);
@@ -662,6 +694,7 @@ async function loadTrending() {
     if (items.length) {
       el.resultQuery.textContent = '🔥 Trending on Giphy';
       showMemes(items, 'trending');
+      setCachedMeme('trending', items);
     }
   } catch (e) {
     console.warn('热榜加载失败（不影响识别）:', e);
